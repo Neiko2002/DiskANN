@@ -36,6 +36,7 @@ if (MSVC)
         message(FATAL_ERROR "Cannot find nuget command line tool.\nPlease install it from e.g. https://www.nuget.org/downloads")
     endif()
 
+	message(STATUS "Configure nuget in ${CMAKE_BINARY_DIR}")
     set(DISKANN_MSVC_PACKAGES_CONFIG ${CMAKE_BINARY_DIR}/packages.config)
     set(DISKANN_MSVC_PACKAGES ${CMAKE_BINARY_DIR}/packages)
 

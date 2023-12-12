@@ -91,7 +91,7 @@ int search_memory_index(diskann::Metric &metric, const std::string &index_path, 
     auto index_factory = diskann::IndexFactory(config);
     auto index = index_factory.create_instance();
     index->load(index_path.c_str(), num_threads, *(std::max_element(Lvec.begin(), Lvec.end())));
-    std::cout << "Index loaded" << std::endl;
+    printProcessMemory("Index loaded");
 
     if (metric == diskann::FAST_L2)
         index->optimize_index_layout();
@@ -240,25 +240,25 @@ int search_memory_index(diskann::Metric &metric, const std::string &index_path, 
         std::cout << std::endl;
     }
 
-    std::cout << "Done searching. Now saving results " << std::endl;
-    uint64_t test_id = 0;
-    for (auto L : Lvec)
-    {
-        if (L < recall_at)
-        {
-            diskann::cout << "Ignoring search with L:" << L << " since it's smaller than K:" << recall_at << std::endl;
-            continue;
-        }
-        std::string cur_result_path_prefix = result_path_prefix + "_" + std::to_string(L);
+    //std::cout << "Done searching. Now saving results " << std::endl;
+    //uint64_t test_id = 0;
+    //for (auto L : Lvec)
+    //{
+    //    if (L < recall_at)
+    //    {
+    //        diskann::cout << "Ignoring search with L:" << L << " since it's smaller than K:" << recall_at << std::endl;
+    //        continue;
+    //    }
+    //    std::string cur_result_path_prefix = result_path_prefix + "_" + std::to_string(L);
 
-        std::string cur_result_path = cur_result_path_prefix + "_idx_uint32.bin";
-        diskann::save_bin<uint32_t>(cur_result_path, query_result_ids[test_id].data(), query_num, recall_at);
+    //    std::string cur_result_path = cur_result_path_prefix + "_idx_uint32.bin";
+    //    diskann::save_bin<uint32_t>(cur_result_path, query_result_ids[test_id].data(), query_num, recall_at);
 
-        cur_result_path = cur_result_path_prefix + "_dists_float.bin";
-        diskann::save_bin<float>(cur_result_path, query_result_dists[test_id].data(), query_num, recall_at);
+    //    cur_result_path = cur_result_path_prefix + "_dists_float.bin";
+    //    diskann::save_bin<float>(cur_result_path, query_result_dists[test_id].data(), query_num, recall_at);
 
-        test_id++;
-    }
+    //    test_id++;
+    //}
 
     diskann::aligned_free(query);
     return best_recall >= fail_if_recall_below ? 0 : -1;
@@ -287,8 +287,8 @@ int main(int argc, char **argv)
                                        program_options_utils::DISTANCE_FUNCTION_DESCRIPTION);
         required_configs.add_options()("index_path_prefix", po::value<std::string>(&index_path_prefix)->required(),
                                        program_options_utils::INDEX_PATH_PREFIX_DESCRIPTION);
-        required_configs.add_options()("result_path", po::value<std::string>(&result_path)->required(),
-                                       program_options_utils::RESULT_PATH_DESCRIPTION);
+        //required_configs.add_options()("result_path", po::value<std::string>(&result_path)->required(),
+        //                               program_options_utils::RESULT_PATH_DESCRIPTION);
         required_configs.add_options()("query_file", po::value<std::string>(&query_file)->required(),
                                        program_options_utils::QUERY_FILE_DESCRIPTION);
         required_configs.add_options()("recall_at,K", po::value<uint32_t>(&K)->required(),

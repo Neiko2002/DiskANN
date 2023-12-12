@@ -1357,16 +1357,16 @@ template <typename T, typename TagT, typename LabelT> void Index<T, TagT, LabelT
 
         inter_insert(node, pruned_list, scratch);
 
-        if (node_ctr % 100000 == 0)
+        if (node_ctr % 50000 == 0)
         {
-            diskann::cout << "\r" << (100.0 * node_ctr) / (visit_order.size()) << "% of index build completed."
-                          << std::flush;
+            printProcessMemory((std::to_string((100.0 * node_ctr) / (visit_order.size())) +
+                               "% of index build completed.").c_str());
         }
     }
 
     if (_nd > 0)
     {
-        diskann::cout << "Starting final cleanup.." << std::flush;
+        diskann::cout << "Starting final cleanup.." << std::endl;
     }
 #pragma omp parallel for schedule(dynamic, 2048)
     for (int64_t node_ctr = 0; node_ctr < (int64_t)(visit_order.size()); node_ctr++)
@@ -2447,7 +2447,7 @@ consolidation_report Index<T, TagT, LabelT>::consolidate_deletes(const IndexWrit
         return consolidation_report(diskann::consolidation_report::status_code::LOCK_FAIL, 0, 0, 0, 0, 0, 0, 0);
     }
 
-    diskann::cout << "Starting consolidate_deletes... ";
+    //diskann::cout << "Starting consolidate_deletes... ";
 
     std::unique_ptr<tsl::robin_set<uint32_t>> old_delete_set(new tsl::robin_set<uint32_t>);
     {
@@ -2501,7 +2501,7 @@ consolidation_report Index<T, TagT, LabelT>::consolidate_deletes(const IndexWrit
     }
 
     double duration = timer.elapsed() / 1000000.0;
-    diskann::cout << " done in " << duration << " seconds." << std::endl;
+    //diskann::cout << " done in " << duration << " seconds." << std::endl;
     return consolidation_report(diskann::consolidation_report::status_code::SUCCESS, ret_nd, max_points,
                                 empty_slots_size, old_delete_set_size, delete_set_size, num_calls_to_process_delete,
                                 duration);

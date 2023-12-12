@@ -27,7 +27,7 @@ int main(int argc, char **argv)
     std::string data_type, dist_fn, data_path, index_path_prefix, label_file, universal_label, label_type;
     uint32_t num_threads, R, L, Lf, build_PQ_bytes;
     float alpha;
-    bool use_pq_build, use_opq;
+    bool use_pq_build, use_opq, use_tags;
 
     po::options_description desc{
         program_options_utils::make_program_description("build_memory_index", "Build a memory-based DiskANN index.")};
@@ -70,6 +70,8 @@ int main(int argc, char **argv)
                                        program_options_utils::FILTERED_LBUILD);
         optional_configs.add_options()("label_type", po::value<std::string>(&label_type)->default_value("uint"),
                                        program_options_utils::LABEL_TYPE_DESCRIPTION);
+        optional_configs.add_options()("tags", po::value<bool>(&use_tags)->default_value(false),
+                                       "Whether to use external identifiers (tags). Default false.");
 
         // Merge required and optional parameters
         desc.add(required_configs).add(optional_configs);
