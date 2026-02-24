@@ -16,8 +16,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${DISKANN_MKL_INCLUDE_DIRECTO
 
 target_link_options(${PROJECT_NAME} PRIVATE /DLL /IMPLIB:${DISKANN_DLL_IMPLIB} /LTCG)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${DISKANN_MKL_LINK_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} PRIVATE synchronization.lib)
-
+if (MSVC)
+    target_link_libraries(${PROJECT_NAME} PRIVATE synchronization.lib)
+endif()
 if (DISKANN_DLL_TCMALLOC_LINK_OPTIONS)
     target_link_libraries(${PROJECT_NAME} PUBLIC ${DISKANN_DLL_TCMALLOC_LINK_OPTIONS})
 endif()

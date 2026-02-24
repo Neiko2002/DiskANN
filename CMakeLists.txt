@@ -41,6 +41,11 @@ if (MSVC)
     set(DISKANN_MSVC_PACKAGES ${CMAKE_BINARY_DIR}/packages)
 
     message(STATUS "Invoking nuget to download Boost, OpenMP and MKL dependencies...")
+    if (MSVC_TOOLSET_VERSION STREQUAL "143" OR MSVC_TOOLSET_VERSION GREATER 143)
+        set(BOOST_NUGET_VC_VERSION "142")
+    else()
+        set(BOOST_NUGET_VC_VERSION "${MSVC_TOOLSET_VERSION}")
+    endif()
     configure_file(${PROJECT_SOURCE_DIR}/windows/packages.config.in ${DISKANN_MSVC_PACKAGES_CONFIG})
     exec_program(${NUGET_EXE} ARGS install \"${DISKANN_MSVC_PACKAGES_CONFIG}\" -ExcludeVersion -OutputDirectory \"${DISKANN_MSVC_PACKAGES}\")
     if (RESTAPI)
@@ -99,13 +104,13 @@ find_package(Boost COMPONENTS program_options)
 if (MSVC AND NOT Boost_FOUND)
     set(DISKANN_BOOST_INCLUDE "${DISKANN_MSVC_PACKAGES}/boost/lib/native/include")
     # Multi-threaded static library.
-    set(PROGRAM_OPTIONS_LIB_PATTERN "${DISKANN_MSVC_PACKAGES}/boost_program_options-vc${MSVC_TOOLSET_VERSION}/lib/native/libboost_program_options-vc${MSVC_TOOLSET_VERSION}-mt-x64-*.lib")
+    set(PROGRAM_OPTIONS_LIB_PATTERN "${DISKANN_MSVC_PACKAGES}/boost_program_options-vc${BOOST_NUGET_VC_VERSION}/lib/native/libboost_program_options-vc${BOOST_NUGET_VC_VERSION}-mt-x64-*.lib")
     file(GLOB DISKANN_BOOST_PROGRAM_OPTIONS_LIB ${PROGRAM_OPTIONS_LIB_PATTERN})
 
-    set(PROGRAM_OPTIONS_DLIB_PATTERN "${DISKANN_MSVC_PACKAGES}/boost_program_options-vc${MSVC_TOOLSET_VERSION}/lib/native/libboost_program_options-vc${MSVC_TOOLSET_VERSION}-mt-gd-x64-*.lib")
+    set(PROGRAM_OPTIONS_DLIB_PATTERN "${DISKANN_MSVC_PACKAGES}/boost_program_options-vc${BOOST_NUGET_VC_VERSION}/lib/native/libboost_program_options-vc${BOOST_NUGET_VC_VERSION}-mt-gd-x64-*.lib")
     file(GLOB DISKANN_BOOST_PROGRAM_OPTIONS_DLIB ${PROGRAM_OPTIONS_DLIB_PATTERN})
 
-    if (EXISTS ${DISKANN_BOOST_INCLUDE} AND EXISTS ${DISKANN_BOOST_PROGRAM_OPTIONS_LIB} AND EXISTS ${DISKANN_BOOST_PROGRAM_OPTIONS_DLIB})
+    if (EXISTS "${DISKANN_BOOST_INCLUDE}" AND EXISTS "${DISKANN_BOOST_PROGRAM_OPTIONS_LIB}" AND EXISTS "${DISKANN_BOOST_PROGRAM_OPTIONS_DLIB}")
         set(Boost_FOUND ON)
         set(Boost_INCLUDE_DIR ${DISKANN_BOOST_INCLUDE})
         add_library(Boost::program_options STATIC IMPORTED)
@@ -218,6 +223,12 @@ if (MSVC)
         "${PROJECT_SOURCE_DIR}/gperftools/x64/Release-Patch/libtcmalloc_minimal.pdb")
 
     # Tell CMake how to build the tcmalloc linker library from the submodule.
+    if(NOT CMAKE_VS_MSBUILD_COMMAND)
+        find_program(CMAKE_VS_MSBUILD_COMMAND NAMES msbuild)
+    endif()
+    if(NOT CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION)
+        set(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION ${CMAKE_SYSTEM_VERSION})
+    endif()
     add_custom_target(build_libtcmalloc_minimal DEPENDS ${TCMALLOC_LINK_LIBRARY})
     add_custom_command(OUTPUT ${TCMALLOC_LINK_LIBRARY}
                        COMMAND ${CMAKE_VS_MSBUILD_COMMAND} gperftools.sln /m /nologo
