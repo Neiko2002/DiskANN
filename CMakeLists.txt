@@ -226,16 +226,20 @@ if (MSVC)
     if(NOT CMAKE_VS_MSBUILD_COMMAND)
         find_program(CMAKE_VS_MSBUILD_COMMAND NAMES msbuild)
     endif()
-    if(NOT CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION)
-        set(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION ${CMAKE_SYSTEM_VERSION})
+
+    set(GPERFTOOLS_MSBUILD_ARGS
+        gperftools.sln /m /nologo
+        /t:libtcmalloc_minimal /p:Configuration="Release-Patch"
+        /property:Platform="x64"
+        /p:PlatformToolset=v${MSVC_TOOLSET_VERSION})
+
+    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION)
+        list(APPEND GPERFTOOLS_MSBUILD_ARGS /p:WindowsTargetPlatformVersion=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION})
     endif()
+
     add_custom_target(build_libtcmalloc_minimal DEPENDS ${TCMALLOC_LINK_LIBRARY})
     add_custom_command(OUTPUT ${TCMALLOC_LINK_LIBRARY}
-                       COMMAND ${CMAKE_VS_MSBUILD_COMMAND} gperftools.sln /m /nologo
-                           /t:libtcmalloc_minimal /p:Configuration="Release-Patch"
-                           /property:Platform="x64"
-                           /p:PlatformToolset=v${MSVC_TOOLSET_VERSION}
-                           /p:WindowsTargetPlatformVersion=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}
+                       COMMAND ${CMAKE_VS_MSBUILD_COMMAND} ${GPERFTOOLS_MSBUILD_ARGS}
                        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/gperftools)
 
     add_library(libtcmalloc_minimal_for_exe STATIC IMPORTED)

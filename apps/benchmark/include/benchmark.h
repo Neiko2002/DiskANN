@@ -13,20 +13,6 @@
 namespace diskann::benchmark
 {
 
-// Helper to access protected members of Index for exploration tests
-template <typename T, typename TagT, typename LabelT> class IndexExplorer : public diskann::Index<T, TagT, LabelT>
-{
-  public:
-    static std::pair<uint32_t, uint32_t> explore(diskann::Index<T, TagT, LabelT> *index, const T *query,
-                                                 const uint32_t L, const std::vector<uint32_t> &init_ids,
-                                                 diskann::InMemQueryScratch<T> *scratch)
-    {
-        const std::vector<LabelT> unused_filters;
-        return ((IndexExplorer *)index)
-            ->iterate_to_fixed_point(scratch->aligned_query(), L, init_ids, scratch, false, unused_filters, true);
-    }
-};
-
 template <typename T, typename TagT, typename LabelT>
 static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *query_data, size_t query_num,
                               size_t query_dim, size_t query_aligned_dim,
@@ -94,6 +80,9 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
 
         log("L_search %4u, Recall@%u %.4f, QPS/thread %8.2f, Mean Latency %6.2f us, 99.9 Latency %8.2f us\n", L, k,
             recall, qps_per_thread, mean_latency, p999_latency);
+
+        if (recall >= 0.997f)
+            break;
     }
 }
 
@@ -105,36 +94,33 @@ static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T
 {
     log("Testing Exploration (k=%u)...\n", k);
 
-    for (uint32_t L_base : {100, 1000, 10000})
+    uint32_t k_factor = 100;
+    for (uint32_t f = 0; f <= 2; f++, k_factor *= 10)
     {
-        for (uint32_t factor : {1, 2, 4, 6, 8, 10})
+        for (uint32_t i = (f == 0) ? 1 : 2; i < 11; i++)
         {
-            uint32_t L = L_base * factor;
-            if (L < k)
-                L = k;
+            uint32_t max_distance_count = ((f == 0) ? (k + k_factor * (i - 1)) : (k_factor * i));
 
             size_t correct = 0;
             size_t total = 0;
             auto start = std::chrono::high_resolution_clock::now();
 
-            for (size_t i = 0; i < explore_query_num; i++)
+            for (size_t q = 0; q < explore_query_num; q++)
             {
-                if (i >= entry_node_indices.size() || entry_node_indices[i].empty())
+                if (q >= entry_node_indices.size() || entry_node_indices[q].empty())
                     continue;
 
-                // For exploration, we use search_with_tags which is a public proxy for exploration.
-                // In DiskANN, specific entry points are harder to set via public API, so we sweep L
-                // to show how search performance evolves.
-
+                uint32_t entry_point = entry_node_indices[q][0];
                 std::vector<TagT> results(k);
                 std::vector<float> dists(k);
-                std::vector<T *> res_vecs;
-                index->search_with_tags(explore_query_data + i * explore_query_aligned_dim, k, L, results.data(),
-                                        dists.data(), res_vecs);
 
-                if (i < ground_truth.size())
+                index->explore_with_tags(explore_query_data + q * explore_query_aligned_dim, (uint64_t)k,
+                                         max_distance_count, max_distance_count, entry_point, results.data(),
+                                         dists.data());
+
+                if (q < ground_truth.size())
                 {
-                    const auto &gt = ground_truth[i];
+                    const auto &gt = ground_truth[q];
                     for (size_t r = 0; r < k; r++)
                     {
                         uint32_t id = static_cast<uint32_t>(results[r]) - 1;
@@ -151,10 +137,13 @@ static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T
             uint64_t time_per_query =
                 explore_query_num > 0 ? (uint64_t)(diff.count() * 1000000 / explore_query_num) : 0;
 
-            log("L_search %6u, Recall@%u %.6f, time_us_per_query %4llu us\n", L, k, recall,
+            log("max_distance_count %7u, Recall@%u %.6f, time_us_per_query %6llu us\n", max_distance_count, k, recall,
                 (unsigned long long)time_per_query);
-            if (recall >= 0.995f)
+
+            if (recall >= 0.997f)
+            {
                 return;
+            }
         }
     }
 }

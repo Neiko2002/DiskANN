@@ -221,6 +221,9 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
 
     virtual size_t _search_with_tags(const DataType &query, const uint64_t K, const uint32_t L, const TagType &tags,
                                      float *distances, DataVector &res_vectors) override;
+    virtual size_t _explore_with_tags(const DataType &query, const uint64_t K, const uint32_t L,
+                                      const uint32_t max_dist, const uint32_t entry_point, const TagType &tags,
+                                      float *distances) override;
 
     virtual void _set_universal_label(const LabelType universal_label) override;
 
@@ -250,7 +253,8 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
     std::pair<uint32_t, uint32_t> iterate_to_fixed_point(const T *node_coords, const uint32_t Lindex,
                                                          const std::vector<uint32_t> &init_ids,
                                                          InMemQueryScratch<T> *scratch, bool use_filter,
-                                                         const std::vector<LabelT> &filters, bool search_invocation);
+                                                         const std::vector<LabelT> &filters, bool search_invocation,
+                                                         uint32_t max_dist = std::numeric_limits<uint32_t>::max());
 
     void search_for_point_and_prune(int location, uint32_t Lindex, std::vector<uint32_t> &pruned_list,
                                     InMemQueryScratch<T> *scratch, bool use_filter = false,

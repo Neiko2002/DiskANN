@@ -795,7 +795,7 @@ bool Index<T, TagT, LabelT>::detect_common_filters(uint32_t point_id, bool searc
 template <typename T, typename TagT, typename LabelT>
 std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
     const T *query, const uint32_t Lsize, const std::vector<uint32_t> &init_ids, InMemQueryScratch<T> *scratch,
-    bool use_filter, const std::vector<LabelT> &filter_labels, bool search_invocation)
+    bool use_filter, const std::vector<LabelT> &filter_labels, bool search_invocation, uint32_t max_dist)
 {
     std::vector<Neighbor> &expanded_nodes = scratch->pool();
     NeighborPriorityQueue &best_L_nodes = scratch->best_l_nodes();
@@ -910,9 +910,9 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
     }
 
     uint32_t hops = 0;
-    uint32_t cmps = 0;
+    uint32_t cmps = (uint32_t)init_ids.size();
 
-    while (best_L_nodes.has_unexpanded_node())
+    while (best_L_nodes.has_unexpanded_node() && cmps < max_dist)
     {
         auto nbr = best_L_nodes.closest_unexpanded();
         auto n = nbr.id;
@@ -994,12 +994,14 @@ std::pair<uint32_t, uint32_t> Index<T, TagT, LabelT>::iterate_to_fixed_point(
                 }
 
                 dist_scratch.push_back(_data_store->get_distance(aligned_query, id));
+                cmps++;
+                if (cmps >= max_dist)
+                    break;
             }
         }
-        cmps += (uint32_t)id_scratch.size();
 
         // Insert <id, dist> pairs into the pool of candidates
-        for (size_t m = 0; m < id_scratch.size(); ++m)
+        for (size_t m = 0; m < dist_scratch.size(); ++m)
         {
             best_L_nodes.insert(Neighbor(id_scratch[m], dist_scratch[m]));
         }
@@ -1359,8 +1361,8 @@ template <typename T, typename TagT, typename LabelT> void Index<T, TagT, LabelT
 
         if (node_ctr % 50000 == 0)
         {
-            printProcessMemory((std::to_string((100.0 * node_ctr) / (visit_order.size())) +
-                               "% of index build completed.").c_str());
+            printProcessMemory(
+                (std::to_string((100.0 * node_ctr) / (visit_order.size())) + "% of index build completed.").c_str());
         }
     }
 
@@ -2263,6 +2265,56 @@ size_t Index<T, TagT, LabelT>::search_with_tags(const T *query, const uint64_t K
     return pos;
 }
 
+template <typename T, typename TagT, typename LabelT>
+size_t Index<T, TagT, LabelT>::_explore_with_tags(const DataType &query, const uint64_t K, const uint32_t L,
+                                                  const uint32_t max_dist, const uint32_t entry_point,
+                                                  const TagType &tags, float *distances)
+{
+    const T *query_ptr = std::any_cast<const T *>(query);
+    TagT *tags_ptr = std::any_cast<TagT *>(tags);
+
+    ScratchStoreManager<InMemQueryScratch<T>> manager(_query_scratch);
+    auto scratch = manager.scratch_space();
+
+    if (L > scratch->get_L())
+    {
+        scratch->resize_for_new_L(L);
+    }
+
+    std::shared_lock<std::shared_timed_mutex> ul(_update_lock);
+
+    std::vector<uint32_t> init_ids;
+    if (entry_point < _max_points + _num_frozen_pts)
+        init_ids.push_back(entry_point);
+    else
+        init_ids = get_init_ids();
+
+    const std::vector<LabelT> unused_filter_label;
+    _data_store->get_dist_fn()->preprocess_query(query_ptr, _data_store->get_dims(), scratch->aligned_query());
+
+    // Call iterate_to_fixed_point with max_dist
+    iterate_to_fixed_point(scratch->aligned_query(), L, init_ids, scratch, false, unused_filter_label, true, max_dist);
+
+    NeighborPriorityQueue &best_L_nodes = scratch->best_l_nodes();
+
+    std::shared_lock<std::shared_timed_mutex> tl(_tag_lock);
+
+    size_t pos = 0;
+    for (size_t i = 0; i < best_L_nodes.size() && pos < K; ++i)
+    {
+        auto node = best_L_nodes[i];
+        TagT tag;
+        if (_location_to_tag.try_get(node.id, tag))
+        {
+            tags_ptr[pos] = tag;
+            if (distances != nullptr)
+                distances[pos] = node.distance;
+            pos++;
+        }
+    }
+    return pos;
+}
+
 template <typename T, typename TagT, typename LabelT> size_t Index<T, TagT, LabelT>::get_num_points()
 {
     std::shared_lock<std::shared_timed_mutex> tl(_tag_lock);
@@ -2447,7 +2499,7 @@ consolidation_report Index<T, TagT, LabelT>::consolidate_deletes(const IndexWrit
         return consolidation_report(diskann::consolidation_report::status_code::LOCK_FAIL, 0, 0, 0, 0, 0, 0, 0);
     }
 
-    //diskann::cout << "Starting consolidate_deletes... ";
+    // diskann::cout << "Starting consolidate_deletes... ";
 
     std::unique_ptr<tsl::robin_set<uint32_t>> old_delete_set(new tsl::robin_set<uint32_t>);
     {
@@ -2501,7 +2553,7 @@ consolidation_report Index<T, TagT, LabelT>::consolidate_deletes(const IndexWrit
     }
 
     double duration = timer.elapsed() / 1000000.0;
-    //diskann::cout << " done in " << duration << " seconds." << std::endl;
+    // diskann::cout << " done in " << duration << " seconds." << std::endl;
     return consolidation_report(diskann::consolidation_report::status_code::SUCCESS, ret_nd, max_points,
                                 empty_slots_size, old_delete_set_size, delete_set_size, num_calls_to_process_delete,
                                 duration);
@@ -3530,4 +3582,14 @@ template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t,
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint16_t>::search_with_filters<
     uint32_t>(const int8_t *query, const uint16_t &filter_label, const size_t K, const uint32_t L, uint32_t *indices,
               float *distances);
+template DISKANN_DLLEXPORT size_t Index<float, uint32_t, uint32_t>::_explore_with_tags(
+    const DataType &query, const uint64_t K, const uint32_t L, const uint32_t max_dist, const uint32_t entry_point,
+    const TagType &tags, float *distances);
+template DISKANN_DLLEXPORT size_t Index<uint8_t, uint32_t, uint32_t>::_explore_with_tags(
+    const DataType &query, const uint64_t K, const uint32_t L, const uint32_t max_dist, const uint32_t entry_point,
+    const TagType &tags, float *distances);
+template DISKANN_DLLEXPORT size_t Index<int8_t, uint32_t, uint32_t>::_explore_with_tags(
+    const DataType &query, const uint64_t K, const uint32_t L, const uint32_t max_dist, const uint32_t entry_point,
+    const TagType &tags, float *distances);
+
 } // namespace diskann

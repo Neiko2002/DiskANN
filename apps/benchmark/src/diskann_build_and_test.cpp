@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 #include <filesystem>
-#include <boost/program_options.hpp>
 
 #include "benchmark.h"
 #include <algorithm>
@@ -11,7 +10,6 @@
 #include <stdexcept>
 #include <chrono>
 #include <fstream>
-#include <iostream>
 
 #include "index.h"
 #include "index_factory.h"
@@ -21,8 +19,8 @@ using namespace diskann::benchmark;
 
 struct DiskANNBuildParams
 {
-    uint32_t R = 64;
-    uint32_t L = 100;
+    uint32_t R = 32;
+    uint32_t L = 125;
     float alpha = 1.2f;
     uint32_t build_PQ_bytes = 0;
     bool use_opq = false;
@@ -49,47 +47,47 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     DatasetConfig conf;
     conf.dataset_name = dataset_name;
 
+    // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
     if (dataset_name == DatasetName::SIFT1M)
     {
-        conf.build_params.R = 64;
-        conf.build_params.L = 100;
+        conf.build_params.R = 32;
+        conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
-        conf.Lvec = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200};
+        conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::DEEP1M)
     {
-        conf.build_params.R = 64;
-        conf.build_params.L = 100;
+        conf.build_params.R = 32;
+        conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
-        conf.Lvec = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200};
+        conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::GLOVE)
     {
-        conf.build_params.R = 64;
+        conf.build_params.R = 32;
         conf.build_params.L = 100;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
-        conf.Lvec = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200};
+        conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::AUDIO)
     {
-        conf.build_params.R = 64;
-        conf.build_params.L = 100;
+        conf.build_params.R = 32;
+        conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 20;
         conf.anns_repeat = 5;
-        conf.explore_k = 1000;
-        conf.Lvec = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+        conf.Lvec = {20, 30, 40, 50, 60, 70, 80, 90, 100};
     }
     else if (dataset_name == DatasetName::ENRON)
     {
-        conf.build_params.R = 64;
-        conf.build_params.L = 100;
+        // https://github.com/microsoft/DiskANN/blob/7762821dbfe91e838ee7f6db93d010f48f4c4d6d/diskann-benchmark/perf_test_inputs/async_scalar_mimir_enron.json
+        conf.build_params.R = 32;
+        conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
-        conf.anns_k = 20;
-        conf.explore_k = 1000;
-        conf.Lvec = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+        conf.anns_k = 100;
+        conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
 
     // Filter Lvec to ensure L >= anns_k
@@ -106,7 +104,6 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     return conf;
 }
 
-// namespace po = boost::program_options; // Removed
 std::string get_index_path(const Dataset &ds, const DatasetConfig &conf)
 {
     std::string prefix = ds.dataset_dir().string() + "/diskann/diskann_R" + std::to_string(conf.build_params.R) + "_L" +
@@ -119,14 +116,7 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
     log("Building DiskANN index: %s\n", index_path.c_str());
     auto build_params = conf.build_params;
 
-    std::string data_type = "float";
-    std::string dist_fn = ds.info().metric == diskann::Metric::L2
-                              ? "l2"
-                              : (ds.info().metric == diskann::Metric::INNER_PRODUCT ? "mips" : "cosine");
-
     size_t data_num = ds.info().base_count;
-    size_t data_dim = ds.info().dims;
-    size_t aligned_dim = ROUND_UP(data_dim, 8);
 
     auto data_wrapper = ds.load_base();
     float *data = data_wrapper.data;
@@ -154,7 +144,7 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
                       .with_label_type("uint")
                       .with_index_write_params(index_build_params)
                       .with_index_search_params(index_search_params)
-                      .is_dynamic_index(true)
+                      .is_dynamic_index(true) // TODO can be false
                       .is_enable_tags(true)
                       .is_use_opq(build_params.use_opq)
                       .is_pq_dist_build(build_params.build_PQ_bytes > 0)
@@ -168,19 +158,124 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
 
     StopW timer;
 
-    for (size_t i = 0; i < data_num; i++)
-    {
-        index->insert_point(&data[i * aligned_dim], tags[i]);
-        if (i > 0 && i % 100000 == 0)
-        {
-            log("added %zu after %.2f seconds.\n", i, (timer.getElapsedTimeMicro() / 1000000.0));
-        }
-    }
-
-    log("added %zu after %.2f seconds.\n", data_num, (timer.getElapsedTimeMicro() / 1000000.0));
+    log("Building graph in one go...\n");
+    index->build(data, data_num, tags);
+    log("Graph built after %.2f seconds.\n", (timer.getElapsedTimeMicro() / 1000000.0));
 
     // Save dynamic index
     index->save(index_path.c_str(), true);
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+std::unique_ptr<diskann::AbstractIndex> load_index(const std::string &index_path, const Dataset &ds,
+                                                   uint32_t num_threads, uint32_t scratch_size)
+{
+    auto config = diskann::IndexConfigBuilder()
+                      .with_metric(ds.info().metric)
+                      .with_dimension(ds.info().dims)
+                      .with_max_points(ds.info().base_count)
+                      .with_data_load_store_strategy(diskann::DataStoreStrategy::MEMORY)
+                      .with_graph_load_store_strategy(diskann::GraphStoreStrategy::MEMORY)
+                      .with_data_type("float")
+                      .with_label_type("uint")
+                      .is_dynamic_index(true)
+                      .is_enable_tags(true)
+                      .build();
+
+    auto index_factory = diskann::IndexFactory(config);
+    auto index = index_factory.create_instance();
+    index->load(index_path.c_str(), num_threads, scratch_size);
+    return index;
+}
+
+void run_anns_test(const std::string &index_path, const Dataset &ds, const DatasetConfig &conf, uint32_t num_threads)
+{
+    uint32_t anns_scratch = *(std::max_element(conf.Lvec.begin(), conf.Lvec.end()));
+    log("\nLoading index for ANNS tests (scratch_size=%u)...\n", anns_scratch);
+    auto index = load_index(index_path, ds, num_threads, anns_scratch);
+
+    log("Loading query data...\n");
+    auto query_data = ds.load_query();
+    size_t query_num = ds.info().query_count;
+    size_t query_dim = ds.info().dims;
+
+    auto ground_truth = ds.load_groundtruth(conf.anns_k);
+
+    log("----------------------------------------\n");
+    log("Running ANNS Tests (k=%u)\n", conf.anns_k);
+    log("----------------------------------------\n");
+
+    if (ds.info().metric == diskann::FAST_L2)
+    {
+        log("Optimizing index layout for FAST_L2...\n");
+        auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
+        if (typed_index)
+        {
+            typed_index->optimize_index_layout();
+        }
+    }
+
+    auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
+    if (typed_index)
+    {
+        test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim, query_dim,
+                                                     ground_truth, conf.anns_k, conf.Lvec, num_threads);
+    }
+    else
+    {
+        log("Failed to dynamic cast index for ANNS testing.\n");
+    }
+}
+
+void run_explore_test(const std::string &index_path, const Dataset &ds, const DatasetConfig &conf, bool use_half_gt,
+                      uint32_t num_threads)
+{
+    std::string entry_file = ds.explore_entry_vertex_file();
+    std::string explore_gt_file = ds.explore_groundtruth_file(use_half_gt);
+
+    if (diskann::benchmark::file_exists(entry_file) && diskann::benchmark::file_exists(explore_gt_file))
+    {
+        log("\nLoading index for Exploration Tests (scratch_size=%u)...\n", conf.explore_k);
+        auto index = load_index(index_path, ds, num_threads, conf.explore_k);
+
+        log("----------------------------------------\n");
+        log("Running Exploration Tests (k=%u)\n", conf.explore_k);
+        log("----------------------------------------\n");
+
+        size_t entry_count = 0;
+        auto entry_indices = load_ivecs_as_vectors(entry_file.c_str(), entry_count);
+
+        size_t dim_gt = 0, n_gt = 0;
+        auto gt_ptr = ivecs_read(explore_gt_file.c_str(), dim_gt, n_gt);
+
+        std::vector<std::vector<uint32_t>> explore_gt_vec(n_gt);
+        if (gt_ptr)
+        {
+            for (size_t i = 0; i < n_gt; ++i)
+            {
+                explore_gt_vec[i].assign(gt_ptr.get() + i * dim_gt, gt_ptr.get() + (i + 1) * dim_gt);
+                std::sort(explore_gt_vec[i].begin(), explore_gt_vec[i].end());
+            }
+        }
+
+        unsigned num_explore = 0, dim_explore = 0;
+        float *explore_queries =
+            load_fvecs((ds.files_dir() / ds.info().explore_query_file).string().c_str(), num_explore, dim_explore);
+        size_t aligned_dim_explore = dim_explore;
+
+        auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
+        if (typed_index && explore_queries)
+        {
+            test_diskann_explore<float, uint32_t, uint32_t>(typed_index, explore_queries, num_explore, dim_explore,
+                                                            aligned_dim_explore, explore_gt_vec, entry_indices,
+                                                            conf.explore_k);
+        }
+
+        if (explore_queries)
+            delete[] explore_queries;
+    }
 }
 
 enum class DynamicScenario
@@ -210,7 +305,6 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
     auto build_params = conf.build_params;
     size_t data_num = ds.info().base_count;
     size_t data_dim = ds.info().dims;
-    size_t aligned_dim = ROUND_UP(data_dim, 8);
     auto data_wrapper = ds.load_base();
     float *data = data_wrapper.data;
 
@@ -220,7 +314,6 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
     auto query_data = ds.load_query();
     size_t query_num = ds.info().query_count;
     size_t query_dim = ds.info().dims;
-    size_t query_aligned_dim = ROUND_UP(query_dim, 8);
 
     auto ground_truth = ds.load_groundtruth(conf.anns_k, true);
 
@@ -258,8 +351,8 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
                                           .with_num_threads(num_threads)
                                           .build();
 
-            auto index_search_params =
-                diskann::IndexSearchParams(index_build_params.search_list_size, index_build_params.num_threads);
+            uint32_t max_test_L = *(std::max_element(conf.Lvec.begin(), conf.Lvec.end()));
+            auto index_search_params = diskann::IndexSearchParams(max_test_L, index_build_params.num_threads);
 
             auto config = diskann::IndexConfigBuilder()
                               .with_metric(ds.info().metric)
@@ -286,23 +379,27 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
             const size_t max_elements = data_num;
             const size_t half_elements = max_elements / 2;
 
-            StopW timer;
+            StopW scenario_timer;
             log("\n--- Dynamic updates ---\n");
 
             if (scenario == DynamicScenario::AddHalf)
             {
+                StopW add_timer;
                 for (size_t i = 0; i < half_elements; ++i)
                 {
-                    index->insert_point(&data[i * aligned_dim], tags[i]);
+                    index->insert_point(&data[i * data_dim], tags[i]);
                 }
-                log("Update time: %.2f s\n", (timer.getElapsedTimeMicro() / 1e6));
+                log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
             }
             else if (scenario == DynamicScenario::AddAllRemoveHalf)
             {
+                StopW add_timer;
                 for (size_t i = 0; i < max_elements; ++i)
                 {
-                    index->insert_point(&data[i * aligned_dim], tags[i]);
+                    index->insert_point(&data[i * data_dim], tags[i]);
                 }
+                log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+
                 StopW del_stopw;
                 for (size_t i = half_elements; i < max_elements; ++i)
                 {
@@ -312,21 +409,23 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
             }
             else if (scenario == DynamicScenario::AddHalfRemoveAndAddOneAtATime)
             {
+                // IMPORTANT: The half-dataset ground truth files correspond to the first half of labels [0..half-1].
+                // For this scenario we want to end up with exactly that active set.
+                // Therefore: start with the SECOND half in the index, then swap it out one-by-one.
+                StopW add_timer;
                 for (size_t i = half_elements; i < max_elements; ++i)
                 {
-                    index->insert_point(&data[i * aligned_dim], tags[i]);
+                    index->insert_point(&data[i * data_dim], tags[i]);
                 }
+                log("Add (second half) time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+
                 StopW update_stopw;
                 for (size_t i = 0; i < half_elements; ++i)
                 {
                     index->lazy_delete(tags[i + half_elements]);
-                    index->insert_point(&data[i * aligned_dim], tags[i]);
+                    index->insert_point(&data[i * data_dim], tags[i]);
                 }
-                for (size_t i = 2 * half_elements; i < max_elements; ++i)
-                {
-                    index->lazy_delete(tags[i]);
-                }
-                log("Update time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
+                log("Update (Delete + Add) time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
             }
 
             if (scenario != DynamicScenario::AddHalf)
@@ -335,6 +434,8 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
                 index->consolidate_deletes(index_build_params);
                 log("Consolidate time: %.2f s\n", (cons_stopw.getElapsedTimeMicro() / 1e6));
             }
+
+            log("Gesamt Zeit (Dynamic Graph Construction): %.2f s\n", (scenario_timer.getElapsedTimeMicro() / 1e6));
 
             index->save(index_path.c_str(), true);
 
@@ -346,9 +447,11 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
                 {
                     typed_index->optimize_index_layout();
                 }
-                log("\n--- ANNS Test (k=%u) ---\n", conf.anns_k);
+                log("----------------------------------------\n");
+                log("Running ANNS Tests (k=%u)\n", conf.anns_k);
+                log("----------------------------------------\n");
                 test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim,
-                                                             query_aligned_dim, ground_truth, conf.anns_k, conf.Lvec,
+                                                             query_dim, ground_truth, conf.anns_k, conf.Lvec,
                                                              num_threads);
             }
 
@@ -364,47 +467,10 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
     }
 }
 
-void run_explore_test(diskann::AbstractIndex *index, const Dataset &ds, const DatasetConfig &conf, bool use_half_gt)
+void run_common_tests(const std::string &index_path, const Dataset &ds, const DatasetConfig &conf, uint32_t num_threads)
 {
-    std::string entry_file = ds.explore_entry_vertex_file();
-    std::string explore_gt_file = ds.explore_groundtruth_file(use_half_gt);
-
-    if (diskann::benchmark::file_exists(entry_file) && diskann::benchmark::file_exists(explore_gt_file))
-    {
-        log("\n--- Exploration Test (k=%u) ---\n", conf.explore_k);
-
-        size_t entry_count = 0;
-        auto entry_indices = load_ivecs_as_vectors(entry_file.c_str(), entry_count);
-
-        size_t dim_gt = 0, n_gt = 0;
-        auto gt_ptr = ivecs_read(explore_gt_file.c_str(), dim_gt, n_gt);
-
-        std::vector<std::vector<uint32_t>> explore_gt_vec(n_gt);
-        if (gt_ptr)
-        {
-            for (size_t i = 0; i < n_gt; ++i)
-            {
-                explore_gt_vec[i].assign(gt_ptr.get() + i * dim_gt, gt_ptr.get() + (i + 1) * dim_gt);
-                std::sort(explore_gt_vec[i].begin(), explore_gt_vec[i].end());
-            }
-        }
-
-        unsigned num_explore = 0, dim_explore = 0;
-        float *explore_queries =
-            load_fvecs((ds.files_dir() / ds.info().explore_query_file).string().c_str(), num_explore, dim_explore);
-        size_t aligned_dim_explore = ROUND_UP(dim_explore, 8);
-
-        auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index);
-        if (typed_index && explore_queries)
-        {
-            test_diskann_explore<float, uint32_t, uint32_t>(typed_index, explore_queries, num_explore, dim_explore,
-                                                            aligned_dim_explore, explore_gt_vec, entry_indices,
-                                                            conf.explore_k);
-        }
-
-        if (explore_queries)
-            delete[] explore_queries;
-    }
+    run_anns_test(index_path, ds, conf, num_threads);
+    run_explore_test(index_path, ds, conf, false, num_threads);
 }
 
 void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_test, bool only_test, uint32_t num_threads)
@@ -440,60 +506,8 @@ void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_tes
             log("Index files already exist at %s. Skipping build.\n", index_path.c_str());
         }
 
-        log("Loading query data...\n");
-        auto query_data = ds.load_query();
-        size_t query_num = ds.info().query_count;
-        size_t query_dim = ds.info().dims;
-        size_t query_aligned_dim = ROUND_UP(query_dim, 8);
-
-        auto ground_truth = ds.load_groundtruth(conf.anns_k);
-
-        log("Loading index for tests...\n");
-        auto config = diskann::IndexConfigBuilder()
-                          .with_metric(ds.info().metric)
-                          .with_dimension(query_dim)
-                          .with_max_points(ds.info().base_count)
-                          .with_data_load_store_strategy(diskann::DataStoreStrategy::MEMORY)
-                          .with_graph_load_store_strategy(diskann::GraphStoreStrategy::MEMORY)
-                          .with_data_type("float")
-                          .with_label_type("uint")
-                          .is_dynamic_index(true)
-                          .is_enable_tags(true)
-                          .build();
-
-        auto index_factory = diskann::IndexFactory(config);
-        auto index = index_factory.create_instance();
-        index->load(index_path.c_str(), num_threads, *(std::max_element(conf.Lvec.begin(), conf.Lvec.end())));
-
-        log("----------------------------------------\n");
-        log("Running ANNS Tests\n");
-        log("----------------------------------------\n");
-
-        if (ds.info().metric == diskann::FAST_L2)
-        {
-            log("Optimizing index layout for FAST_L2...\n");
-            // Cast to exact Index to call optimize_layout if we can,
-            // but IndexFactory returns AbstractIndex so we may need dynamic_cast
-            auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
-            if (typed_index)
-            {
-                typed_index->optimize_index_layout();
-            }
-        }
-
-        auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
-        if (typed_index)
-        {
-            test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim,
-                                                         query_aligned_dim, ground_truth, conf.anns_k, conf.Lvec,
-                                                         num_threads);
-
-            run_explore_test(index.get(), ds, conf, false);
-        }
-        else
-        {
-            log("Failed to dynamic cast index for testing.\n");
-        }
+        run_anns_test(index_path, ds, conf, num_threads);
+        run_explore_test(index_path, ds, conf, false, num_threads);
     }
     catch (const std::exception &e)
     {
@@ -504,7 +518,7 @@ void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_tes
     reset_log_to_console();
 
     // Now run the dynamic tests, appending to the single unified process
-    run_dynamic_data_test(ds, conf, force_test, num_threads);
+    // run_dynamic_data_test(ds, conf, force_test, num_threads);
 }
 
 int main(int argc, char **argv)
@@ -520,20 +534,20 @@ int main(int argc, char **argv)
 #endif
 
     std::string data_root = DATA_PATH;
-    DatasetName ds_name = DatasetName::AUDIO;
+    DatasetName ds_name = DatasetName::GLOVE;
     bool only_test = false;
     bool force_test = false;
-    uint32_t num_threads = omp_get_num_procs();
+    uint32_t num_threads = 1;
 
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
         if (arg == "--only-test" || arg == "-t")
-        { // Added -t for consistency with original Boost.PO
+        {
             only_test = true;
         }
         else if (arg == "--force-test" || arg == "-f")
-        { // Added -f
+        {
             force_test = true;
         }
         else if (arg == "-T" || arg == "--num_threads")
@@ -550,12 +564,10 @@ int main(int argc, char **argv)
         }
         else if (arg.find("--") == 0)
         {
-            // Other flags ignored, or could add error for unknown flags
             std::cerr << "Warning: Unknown option " << arg << "\n";
         }
         else
         {
-            // Must be dataset or path
             DatasetName params_ds = DatasetName::from_string(arg);
             if (params_ds.is_valid())
             {
@@ -563,7 +575,6 @@ int main(int argc, char **argv)
             }
             else
             {
-                // Assume it's the data path if not a valid dataset name
                 data_root = arg;
             }
         }
