@@ -138,7 +138,6 @@ struct DatasetInfo
     size_t query_count;
     uint32_t dims;
     uint32_t scale;
-    uint32_t explore_depth;
 
     std::string base_file;
     std::string query_file;
@@ -160,7 +159,7 @@ struct DatasetInfo
 
 inline DatasetInfo make_dataset_info(const DatasetName &ds)
 {
-    DatasetInfo info{ds, diskann::Metric::L2, 0, 0, 0, 1, 2, {}, {}, {}};
+    DatasetInfo info{ds, diskann::Metric::L2, 0, 0, 0, 1, {}, {}, {}};
 
     std::string name = ds.name();
 
@@ -190,21 +189,18 @@ inline DatasetInfo make_dataset_info(const DatasetName &ds)
         info.query_count = 10000;
         info.dims = 100;
         info.scale = 100;
-        info.metric = diskann::Metric::COSINE;
     }
     else if (ds == DatasetName::AUDIO)
     {
         info.base_count = 53387;
         info.query_count = 200;
         info.dims = 192;
-        info.explore_depth = 1;
     }
     else if (ds == DatasetName::ENRON)
     {
         info.base_count = 94987;
         info.query_count = 200;
         info.dims = 1369;
-        info.explore_depth = 1;
     }
 
     return info;

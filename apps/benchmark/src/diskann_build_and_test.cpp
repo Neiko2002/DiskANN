@@ -111,6 +111,8 @@ std::string get_index_path(const Dataset &ds, const DatasetConfig &conf)
     return prefix;
 }
 
+void generate_graph_stats(const std::string &graph_file);
+
 void run_create_index(const std::string &index_path, const Dataset &ds, const DatasetConfig &conf, uint32_t num_threads)
 {
     log("Building DiskANN index: %s\n", index_path.c_str());
@@ -156,8 +158,16 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
     auto index = index_factory.create_instance();
     index->set_start_points_at_random(static_cast<float>(0));
 
-    StopW timer;
+    log("\nConstruction Parameters:\n");
+    log("----------------------------------------\n");
+    log("R (Max Degree)     : %u\n", build_params.R);
+    log("L (Build List Size): %u\n", build_params.L);
+    log("Alpha              : %.2f\n", build_params.alpha);
+    log("PQ Chunks          : %u\n", build_params.build_PQ_bytes);
+    log("OPQ                : %s\n", build_params.use_opq ? "Yes" : "No");
+    log("----------------------------------------\n");
 
+    StopW timer;
     log("Building graph in one go...\n");
     index->build(data, data_num, tags);
     log("Graph built after %.2f seconds.\n", (timer.getElapsedTimeMicro() / 1000000.0));
@@ -169,6 +179,66 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
+void generate_graph_stats(const std::string &graph_file)
+{
+    std::ifstream in;
+    in.exceptions(std::ios::badbit | std::ios::failbit);
+
+    try
+    {
+        in.open(graph_file, std::ios::binary);
+    }
+    catch (const std::exception &)
+    {
+        log("Warning: Could not open graph file %s for statistics calculation.\n", graph_file.c_str());
+        return;
+    }
+
+    size_t expected_file_size;
+    uint32_t max_observed_degree;
+    uint32_t start;
+    size_t file_frozen_pts;
+
+    in.read((char *)&expected_file_size, sizeof(size_t));
+    in.read((char *)&max_observed_degree, sizeof(uint32_t));
+    in.read((char *)&start, sizeof(uint32_t));
+    in.read((char *)&file_frozen_pts, sizeof(size_t));
+
+    size_t num_nodes = 0;
+    size_t min_degree = std::numeric_limits<size_t>::max();
+    size_t max_degree = 0;
+    size_t total_degree = 0;
+    size_t nodes_with_less_than_2_degree = 0;
+
+    size_t bytes_read = sizeof(size_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(size_t);
+
+    while (bytes_read < expected_file_size)
+    {
+        uint32_t k;
+        in.read((char *)&k, sizeof(uint32_t));
+
+        in.seekg(k * sizeof(uint32_t), std::ios::cur);
+        bytes_read += sizeof(uint32_t) * (k + 1);
+
+        min_degree = std::min(min_degree, (size_t)k);
+        max_degree = std::max(max_degree, (size_t)k);
+        total_degree += k;
+        if (k < 2)
+            nodes_with_less_than_2_degree++;
+
+        num_nodes++;
+    }
+
+    log("\n----------------------------------------\n");
+    log("Graph Statistics:\n");
+    log("----------------------------------------\n");
+    log("Total Nodes      : %zu\n", num_nodes);
+    log("Max Degree       : %zu\n", max_degree);
+    log("Min Degree       : %zu\n", min_degree);
+    log("Average Degree   : %.2f\n", num_nodes > 0 ? (float)total_degree / num_nodes : 0.0f);
+    log("Count (Degree<2) : %zu\n", nodes_with_less_than_2_degree);
+    log("----------------------------------------\n\n");
+}
 std::unique_ptr<diskann::AbstractIndex> load_index(const std::string &index_path, const Dataset &ds,
                                                    uint32_t num_threads, uint32_t scratch_size)
 {
@@ -311,12 +381,6 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
     std::vector<uint32_t> tags(data_num);
     std::iota(tags.begin(), tags.end(), 1);
 
-    auto query_data = ds.load_query();
-    size_t query_num = ds.info().query_count;
-    size_t query_dim = ds.info().dims;
-
-    auto ground_truth = ds.load_groundtruth(conf.anns_k, true);
-
     std::vector<DynamicScenario> scenarios = {DynamicScenario::AddHalf, DynamicScenario::AddAllRemoveHalf,
                                               DynamicScenario::AddHalfRemoveAndAddOneAtATime};
 
@@ -372,88 +436,89 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
                               .is_concurrent_consolidate(false)
                               .build();
 
-            auto index_factory = diskann::IndexFactory(config);
-            auto index = index_factory.create_instance();
-            index->set_start_points_at_random(static_cast<float>(0));
-
-            const size_t max_elements = data_num;
-            const size_t half_elements = max_elements / 2;
-
-            StopW scenario_timer;
-            log("\n--- Dynamic updates ---\n");
-
-            if (scenario == DynamicScenario::AddHalf)
             {
-                StopW add_timer;
-                for (size_t i = 0; i < half_elements; ++i)
-                {
-                    index->insert_point(&data[i * data_dim], tags[i]);
-                }
-                log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
-            }
-            else if (scenario == DynamicScenario::AddAllRemoveHalf)
-            {
-                StopW add_timer;
-                for (size_t i = 0; i < max_elements; ++i)
-                {
-                    index->insert_point(&data[i * data_dim], tags[i]);
-                }
-                log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+                auto index_factory = diskann::IndexFactory(config);
+                auto index = index_factory.create_instance();
+                index->set_start_points_at_random(static_cast<float>(0));
 
-                StopW del_stopw;
-                for (size_t i = half_elements; i < max_elements; ++i)
-                {
-                    index->lazy_delete(tags[i]);
-                }
-                log("Delete time: %.2f s\n", (del_stopw.getElapsedTimeMicro() / 1e6));
-            }
-            else if (scenario == DynamicScenario::AddHalfRemoveAndAddOneAtATime)
-            {
-                // IMPORTANT: The half-dataset ground truth files correspond to the first half of labels [0..half-1].
-                // For this scenario we want to end up with exactly that active set.
-                // Therefore: start with the SECOND half in the index, then swap it out one-by-one.
-                StopW add_timer;
-                for (size_t i = half_elements; i < max_elements; ++i)
-                {
-                    index->insert_point(&data[i * data_dim], tags[i]);
-                }
-                log("Add (second half) time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
-
-                StopW update_stopw;
-                for (size_t i = 0; i < half_elements; ++i)
-                {
-                    index->lazy_delete(tags[i + half_elements]);
-                    index->insert_point(&data[i * data_dim], tags[i]);
-                }
-                log("Update (Delete + Add) time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
-            }
-
-            if (scenario != DynamicScenario::AddHalf)
-            {
-                StopW cons_stopw;
-                index->consolidate_deletes(index_build_params);
-                log("Consolidate time: %.2f s\n", (cons_stopw.getElapsedTimeMicro() / 1e6));
-            }
-
-            log("Gesamt Zeit (Dynamic Graph Construction): %.2f s\n", (scenario_timer.getElapsedTimeMicro() / 1e6));
-
-            index->save(index_path.c_str(), true);
-
-            // Test the index in memory directly without reload
-            auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
-            if (typed_index)
-            {
-                if (ds.info().metric == diskann::FAST_L2)
-                {
-                    typed_index->optimize_index_layout();
-                }
+                log("\nConstruction Parameters:\n");
                 log("----------------------------------------\n");
-                log("Running ANNS Tests (k=%u)\n", conf.anns_k);
+                log("R (Max Degree)     : %u\n", build_params.R);
+                log("L (Build List Size): %u\n", build_params.L);
+                log("Alpha              : %.2f\n", build_params.alpha);
+                log("PQ Chunks          : %u\n", build_params.build_PQ_bytes);
+                log("OPQ                : %s\n", build_params.use_opq ? "Yes" : "No");
                 log("----------------------------------------\n");
-                test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim,
-                                                             query_dim, ground_truth, conf.anns_k, conf.Lvec,
-                                                             num_threads);
+
+                const size_t max_elements = data_num;
+                const size_t half_elements = max_elements / 2;
+
+                StopW scenario_timer;
+                log("\n--- Dynamic updates ---\n");
+
+                if (scenario == DynamicScenario::AddHalf)
+                {
+                    StopW add_timer;
+                    for (size_t i = 0; i < half_elements; ++i)
+                    {
+                        index->insert_point(&data[i * data_dim], tags[i]);
+                    }
+                    log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+                }
+                else if (scenario == DynamicScenario::AddAllRemoveHalf)
+                {
+                    StopW add_timer;
+                    for (size_t i = 0; i < max_elements; ++i)
+                    {
+                        index->insert_point(&data[i * data_dim], tags[i]);
+                    }
+                    log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+
+                    StopW del_stopw;
+                    for (size_t i = half_elements; i < max_elements; ++i)
+                    {
+                        index->lazy_delete(tags[i]);
+                    }
+                    log("Delete time: %.2f s\n", (del_stopw.getElapsedTimeMicro() / 1e6));
+                }
+                else if (scenario == DynamicScenario::AddHalfRemoveAndAddOneAtATime)
+                {
+                    // IMPORTANT: The half-dataset ground truth files correspond to the first half of labels
+                    // [0..half-1]. For this scenario we want to end up with exactly that active set. Therefore:
+                    // start with the SECOND half in the index, then swap it out one-by-one.
+                    StopW add_timer;
+                    for (size_t i = half_elements; i < max_elements; ++i)
+                    {
+                        index->insert_point(&data[i * data_dim], tags[i]);
+                    }
+                    log("Add (second half) time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+
+                    StopW update_stopw;
+                    for (size_t i = 0; i < half_elements; ++i)
+                    {
+                        index->lazy_delete(tags[i + half_elements]);
+                        index->insert_point(&data[i * data_dim], tags[i]);
+                    }
+                    log("Update (Delete + Add) time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
+                }
+
+                if (scenario != DynamicScenario::AddHalf)
+                {
+                    StopW cons_stopw;
+                    index->consolidate_deletes(index_build_params);
+                    log("Consolidate time: %.2f s\n", (cons_stopw.getElapsedTimeMicro() / 1e6));
+                }
+
+                log("Gesamt Zeit (Dynamic Graph Construction): %.2f s\n", (scenario_timer.getElapsedTimeMicro() / 1e6));
+
+                index->save(index_path.c_str(), true);
             }
+
+            // Generate Graph Statistics (after index object is destroyed)
+            generate_graph_stats(index_path);
+
+            // Test the index by loading it from disk (out-of-context testing)
+            run_anns_test(index_path, ds, conf, num_threads);
 
             log("%s: Log written to: %s\n", scenario_name.c_str(), log_file.c_str());
         }
@@ -500,10 +565,13 @@ void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_tes
             !diskann::benchmark::file_exists(index_path + ".data"))
         {
             run_create_index(index_path, ds, conf, num_threads);
+            // Generate Graph Statistics after build (out-of-context)
+            generate_graph_stats(index_path);
         }
         else if (!only_test)
         {
             log("Index files already exist at %s. Skipping build.\n", index_path.c_str());
+            generate_graph_stats(index_path);
         }
 
         run_anns_test(index_path, ds, conf, num_threads);
