@@ -66,7 +66,7 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     else if (dataset_name == DatasetName::GLOVE)
     {
         conf.build_params.R = 32;
-        conf.build_params.L = 100;
+        conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
         conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
@@ -119,6 +119,7 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
     auto build_params = conf.build_params;
 
     size_t data_num = ds.info().base_count;
+    size_t data_dim = ds.info().dims;
 
     auto data_wrapper = ds.load_base();
     float *data = data_wrapper.data;
@@ -146,7 +147,7 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
                       .with_label_type("uint")
                       .with_index_write_params(index_build_params)
                       .with_index_search_params(index_search_params)
-                      .is_dynamic_index(true) // TODO can be false
+                      .is_dynamic_index(true)
                       .is_enable_tags(true)
                       .is_use_opq(build_params.use_opq)
                       .is_pq_dist_build(build_params.build_PQ_bytes > 0)
@@ -162,6 +163,7 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
     log("----------------------------------------\n");
     log("R (Max Degree)     : %u\n", build_params.R);
     log("L (Build List Size): %u\n", build_params.L);
+    log("Max Occlusion Size : %u\n", build_params.max_occlusion_size);
     log("Alpha              : %.2f\n", build_params.alpha);
     log("PQ Chunks          : %u\n", build_params.build_PQ_bytes);
     log("OPQ                : %s\n", build_params.use_opq ? "Yes" : "No");
@@ -169,11 +171,18 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
 
     StopW timer;
     log("Building graph in one go...\n");
-    index->build(data, data_num, tags);
+    for (size_t i = 0; i < data_num; i++)
+    {
+        index->insert_point(&data[i * data_dim], tags[i]);
+        if (i > 0 && i % 100000 == 0)
+        {
+            log("added %zu after %.2f seconds.\n", i, (timer.getElapsedTimeMicro() / 1000000.0));
+        }
+    }
     log("Graph built after %.2f seconds.\n", (timer.getElapsedTimeMicro() / 1000000.0));
 
     // Save dynamic index
-    index->save(index_path.c_str(), true);
+    index->save(index_path.c_str());
 }
 
 // -----------------------------------------------------------------------------
@@ -208,7 +217,7 @@ void generate_graph_stats(const std::string &graph_file)
     size_t min_degree = std::numeric_limits<size_t>::max();
     size_t max_degree = 0;
     size_t total_degree = 0;
-    size_t nodes_with_less_than_2_degree = 0;
+    size_t vertex_with_degree1 = 0;
 
     size_t bytes_read = sizeof(size_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(size_t);
 
@@ -223,8 +232,8 @@ void generate_graph_stats(const std::string &graph_file)
         min_degree = std::min(min_degree, (size_t)k);
         max_degree = std::max(max_degree, (size_t)k);
         total_degree += k;
-        if (k < 2)
-            nodes_with_less_than_2_degree++;
+        if (k == 1)
+            vertex_with_degree1++;
 
         num_nodes++;
     }
@@ -236,7 +245,7 @@ void generate_graph_stats(const std::string &graph_file)
     log("Max Degree       : %zu\n", max_degree);
     log("Min Degree       : %zu\n", min_degree);
     log("Average Degree   : %.2f\n", num_nodes > 0 ? (float)total_degree / num_nodes : 0.0f);
-    log("Count (Degree<2) : %zu\n", nodes_with_less_than_2_degree);
+    log("Count (Degree<2) : %zu\n", vertex_with_degree1);
     log("----------------------------------------\n\n");
 }
 std::unique_ptr<diskann::AbstractIndex> load_index(const std::string &index_path, const Dataset &ds,
@@ -277,21 +286,11 @@ void run_anns_test(const std::string &index_path, const Dataset &ds, const Datas
     log("Running ANNS Tests (k=%u)\n", conf.anns_k);
     log("----------------------------------------\n");
 
-    if (ds.info().metric == diskann::FAST_L2)
-    {
-        log("Optimizing index layout for FAST_L2...\n");
-        auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
-        if (typed_index)
-        {
-            typed_index->optimize_index_layout();
-        }
-    }
-
     auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
     if (typed_index)
     {
-        test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim, query_dim,
-                                                     ground_truth, conf.anns_k, conf.Lvec, num_threads);
+        test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim, ground_truth,
+                                                     conf.anns_k, conf.Lvec, num_threads);
     }
     else
     {
@@ -333,14 +332,12 @@ void run_explore_test(const std::string &index_path, const Dataset &ds, const Da
         unsigned num_explore = 0, dim_explore = 0;
         float *explore_queries =
             load_fvecs((ds.files_dir() / ds.info().explore_query_file).string().c_str(), num_explore, dim_explore);
-        size_t aligned_dim_explore = dim_explore;
 
         auto typed_index = dynamic_cast<diskann::Index<float, uint32_t, uint32_t> *>(index.get());
         if (typed_index && explore_queries)
         {
             test_diskann_explore<float, uint32_t, uint32_t>(typed_index, explore_queries, num_explore, dim_explore,
-                                                            aligned_dim_explore, explore_gt_vec, entry_indices,
-                                                            conf.explore_k);
+                                                            explore_gt_vec, entry_indices, conf.explore_k);
         }
 
         if (explore_queries)
@@ -370,7 +367,7 @@ inline const char *dynamic_scenario_str(DynamicScenario scenario)
     }
 }
 
-void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool force_test, uint32_t num_threads)
+void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_test, uint32_t num_threads)
 {
     auto build_params = conf.build_params;
     size_t data_num = ds.info().base_count;
@@ -445,6 +442,7 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
                 log("----------------------------------------\n");
                 log("R (Max Degree)     : %u\n", build_params.R);
                 log("L (Build List Size): %u\n", build_params.L);
+                log("Max Occlusion Size : %u\n", build_params.max_occlusion_size);
                 log("Alpha              : %.2f\n", build_params.alpha);
                 log("PQ Chunks          : %u\n", build_params.build_PQ_bytes);
                 log("OPQ                : %s\n", build_params.use_opq ? "Yes" : "No");
@@ -514,18 +512,18 @@ void run_dynamic_data_test(const Dataset &ds, const DatasetConfig &conf, bool fo
                 index->save(index_path.c_str(), true);
             }
 
-            // Generate Graph Statistics (after index object is destroyed)
-            generate_graph_stats(index_path);
-
-            // Test the index by loading it from disk (out-of-context testing)
-            run_anns_test(index_path, ds, conf, num_threads);
-
             log("%s: Log written to: %s\n", scenario_name.c_str(), log_file.c_str());
         }
         catch (const std::exception &e)
         {
             log("Exception in dynamic test '%s': %s\n", scenario_name.c_str(), e.what());
         }
+
+        // Generate Graph Statistics (after index object is destroyed)
+        generate_graph_stats(index_path);
+
+        // Test the index by loading it from disk (out-of-context testing)
+        run_anns_test(index_path, ds, conf, num_threads);
 
         detach_cout_from_log();
         reset_log_to_console();
@@ -538,20 +536,20 @@ void run_common_tests(const std::string &index_path, const Dataset &ds, const Da
     run_explore_test(index_path, ds, conf, false, num_threads);
 }
 
-void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_test, bool only_test, uint32_t num_threads)
+void run_static_tests(const Dataset &ds, const DatasetConfig &conf, bool force_test, uint32_t num_threads)
 {
     std::string index_path = get_index_path(ds, conf);
 
     ensure_directory(ds.dataset_dir() / "diskann");
     std::string log_file = index_path + "_benchmark.log";
 
-    if (!force_test && !only_test && diskann::benchmark::file_exists(log_file))
+    if (!force_test && diskann::benchmark::file_exists(log_file))
     {
         log("Log file %s already exists. Skipping.\n", log_file.c_str());
         return;
     }
 
-    set_log_file(log_file, force_test || only_test);
+    set_log_file(log_file, force_test);
     attach_cout_to_log();
 
     log("================================================================================\n");
@@ -560,20 +558,14 @@ void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_tes
 
     try
     {
-        if (!only_test && !diskann::benchmark::file_exists(index_path + "_pq_pivots.bin") &&
+        if (!diskann::benchmark::file_exists(index_path + "_pq_pivots.bin") &&
             !diskann::benchmark::file_exists(index_path + "_sample_data.bin") &&
             !diskann::benchmark::file_exists(index_path + ".data"))
         {
             run_create_index(index_path, ds, conf, num_threads);
-            // Generate Graph Statistics after build (out-of-context)
-            generate_graph_stats(index_path);
-        }
-        else if (!only_test)
-        {
-            log("Index files already exist at %s. Skipping build.\n", index_path.c_str());
-            generate_graph_stats(index_path);
         }
 
+        generate_graph_stats(index_path);
         run_anns_test(index_path, ds, conf, num_threads);
         run_explore_test(index_path, ds, conf, false, num_threads);
     }
@@ -584,9 +576,6 @@ void run_test_suite(const Dataset &ds, const DatasetConfig &conf, bool force_tes
 
     detach_cout_from_log();
     reset_log_to_console();
-
-    // Now run the dynamic tests, appending to the single unified process
-    // run_dynamic_data_test(ds, conf, force_test, num_threads);
 }
 
 int main(int argc, char **argv)
@@ -603,18 +592,13 @@ int main(int argc, char **argv)
 
     std::string data_root = DATA_PATH;
     DatasetName ds_name = DatasetName::GLOVE;
-    bool only_test = false;
-    bool force_test = false;
+    bool force_test = true;
     uint32_t num_threads = 1;
 
     for (int i = 1; i < argc; ++i)
     {
         std::string arg = argv[i];
-        if (arg == "--only-test" || arg == "-t")
-        {
-            only_test = true;
-        }
-        else if (arg == "--force-test" || arg == "-f")
+        if (arg == "--force-test" || arg == "-f")
         {
             force_test = true;
         }
@@ -671,7 +655,8 @@ int main(int argc, char **argv)
     {
         Dataset dataset(ds_name_to_run, data_root);
         DatasetConfig conf = get_dataset_config(ds_name_to_run);
-        run_test_suite(dataset, conf, force_test, only_test, num_threads);
+        run_static_tests(dataset, conf, force_test, num_threads);
+        run_dynamic_tests(dataset, conf, force_test, num_threads);
     }
 
     return 0;

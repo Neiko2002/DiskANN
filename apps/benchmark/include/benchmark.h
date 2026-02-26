@@ -15,9 +15,8 @@ namespace diskann::benchmark
 
 template <typename T, typename TagT, typename LabelT>
 static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *query_data, size_t query_num,
-                              size_t query_dim, size_t query_aligned_dim,
-                              const std::vector<std::vector<uint32_t>> &ground_truth, const uint32_t k,
-                              const std::vector<uint32_t> &Lvec, uint32_t num_threads)
+                              size_t query_dim, const std::vector<std::vector<uint32_t>> &ground_truth,
+                              const uint32_t k, const std::vector<uint32_t> &Lvec, uint32_t num_threads)
 {
     std::vector<TagT> query_result_tags(k * query_num);
     std::vector<float> latency_stats(query_num, 0);
@@ -40,7 +39,7 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
             std::vector<float> distances(k);
 
             // Always search with tags as they represent the original point IDs.
-            index->search_with_tags(query_data + i * query_aligned_dim, k, L, query_result_tags.data() + i * k,
+            index->search_with_tags(query_data + i * query_dim, k, L, query_result_tags.data() + i * k,
                                     distances.data(), res_vectors);
 
             auto qe = std::chrono::high_resolution_clock::now();
@@ -88,7 +87,7 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
 
 template <typename T, typename TagT, typename LabelT>
 static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T *explore_query_data,
-                                 size_t explore_query_num, size_t explore_query_dim, size_t explore_query_aligned_dim,
+                                 size_t explore_query_num, size_t explore_query_dim,
                                  const std::vector<std::vector<uint32_t>> &ground_truth,
                                  const std::vector<std::vector<uint32_t>> &entry_node_indices, const uint32_t k)
 {
@@ -114,9 +113,8 @@ static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T
                 std::vector<TagT> results(k);
                 std::vector<float> dists(k);
 
-                index->explore_with_tags(explore_query_data + q * explore_query_aligned_dim, (uint64_t)k,
-                                         max_distance_count, max_distance_count, entry_point, results.data(),
-                                         dists.data());
+                index->explore_with_tags(explore_query_data + q * explore_query_dim, (uint64_t)k, max_distance_count,
+                                         max_distance_count, entry_point, results.data(), dists.data());
 
                 if (q < ground_truth.size())
                 {
