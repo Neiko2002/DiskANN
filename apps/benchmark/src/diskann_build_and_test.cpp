@@ -50,14 +50,14 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
     if (dataset_name == DatasetName::SIFT1M)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::DEEP1M)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
@@ -66,14 +66,14 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     else if (dataset_name == DatasetName::GLOVE)
     {
         conf.build_params.R = 32;
-        conf.build_params.L = 125;
+        conf.build_params.L = 100;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
-        conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
+        conf.Lvec = {100, 250, 500, 1000, 1500, 2500, 5000, 10000};
     }
     else if (dataset_name == DatasetName::AUDIO)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 20;
@@ -83,7 +83,7 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     else if (dataset_name == DatasetName::ENRON)
     {
         // https://github.com/microsoft/DiskANN/blob/7762821dbfe91e838ee7f6db93d010f48f4c4d6d/diskann-benchmark/perf_test_inputs/async_scalar_mimir_enron.json
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
@@ -126,6 +126,7 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
 
     std::vector<uint32_t> tags(data_num);
     std::iota(tags.begin(), tags.end(), 1); // tag 0 is reserved for hidden points
+    diskann::cout << "Tags from " << tags[0] << " to " << tags[data_num - 1] << std::endl;
 
     auto index_build_params = diskann::IndexWriteParametersBuilder(build_params.L, build_params.R)
                                   .with_max_occlusion_size(build_params.max_occlusion_size)
@@ -214,10 +215,13 @@ void generate_graph_stats(const std::string &graph_file)
     in.read((char *)&file_frozen_pts, sizeof(size_t));
 
     size_t num_nodes = 0;
-    size_t min_degree = std::numeric_limits<size_t>::max();
-    size_t max_degree = 0;
-    size_t total_degree = 0;
-    size_t vertex_with_degree1 = 0;
+    size_t min_out_degree = std::numeric_limits<size_t>::max();
+    size_t max_out_degree = 0;
+    size_t total_edges = 0;
+    size_t count_out_degree_0 = 0;
+    size_t count_out_degree_1 = 0;
+
+    std::vector<uint32_t> in_degrees;
 
     size_t bytes_read = sizeof(size_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(size_t);
 
@@ -226,26 +230,81 @@ void generate_graph_stats(const std::string &graph_file)
         uint32_t k;
         in.read((char *)&k, sizeof(uint32_t));
 
-        in.seekg(k * sizeof(uint32_t), std::ios::cur);
+        if (k > 0)
+        {
+            std::vector<uint32_t> neighbors(k);
+            in.read((char *)neighbors.data(), k * sizeof(uint32_t));
+            for (uint32_t ngh : neighbors)
+            {
+                if (ngh >= in_degrees.size())
+                {
+                    in_degrees.resize(std::max((size_t)ngh + 1, in_degrees.size() * 2), 0);
+                }
+                in_degrees[ngh]++;
+            }
+        }
+
         bytes_read += sizeof(uint32_t) * (k + 1);
 
-        min_degree = std::min(min_degree, (size_t)k);
-        max_degree = std::max(max_degree, (size_t)k);
-        total_degree += k;
-        if (k == 1)
-            vertex_with_degree1++;
+        min_out_degree = std::min(min_out_degree, (size_t)k);
+        max_out_degree = std::max(max_out_degree, (size_t)k);
+        total_edges += k;
+
+        if (k == 0)
+            count_out_degree_0++;
+        else if (k == 1)
+            count_out_degree_1++;
 
         num_nodes++;
+    }
+
+    if (num_nodes == 0)
+    {
+        min_out_degree = 0;
+    }
+
+    if (in_degrees.size() < num_nodes)
+    {
+        in_degrees.resize(num_nodes, 0);
+    }
+
+    size_t min_in_degree = std::numeric_limits<size_t>::max();
+    size_t max_in_degree = 0;
+    size_t count_in_degree_0 = 0;
+    size_t count_in_degree_1 = 0;
+
+    if (num_nodes > 0)
+    {
+        for (size_t i = 0; i < num_nodes; i++)
+        {
+            size_t deg = (size_t)in_degrees[i];
+            min_in_degree = std::min(min_in_degree, deg);
+            max_in_degree = std::max(max_in_degree, deg);
+            if (deg == 0)
+                count_in_degree_0++;
+            else if (deg == 1)
+                count_in_degree_1++;
+        }
+    }
+    else
+    {
+        min_in_degree = 0;
     }
 
     log("\n----------------------------------------\n");
     log("Graph Statistics:\n");
     log("----------------------------------------\n");
     log("Total Nodes      : %zu\n", num_nodes);
-    log("Max Degree       : %zu\n", max_degree);
-    log("Min Degree       : %zu\n", min_degree);
-    log("Average Degree   : %.2f\n", num_nodes > 0 ? (float)total_degree / num_nodes : 0.0f);
-    log("Count (Degree<2) : %zu\n", vertex_with_degree1);
+    log("Total Edges      : %zu\n", total_edges);
+    log("Max Out-Degree   : %zu\n", max_out_degree);
+    log("Min Out-Degree   : %zu\n", min_out_degree);
+    log("Max In-Degree    : %zu\n", max_in_degree);
+    log("Min In-Degree    : %zu\n", min_in_degree);
+    log("Count (Out=0)    : %zu\n", count_out_degree_0);
+    log("Count (Out=1)    : %zu\n", count_out_degree_1);
+    log("Count (In=0)     : %zu\n", count_in_degree_0);
+    log("Count (In=1)     : %zu\n", count_in_degree_1);
+    log("Average Degree   : %.2f\n", num_nodes > 0 ? (float)total_edges / num_nodes : 0.0f);
     log("----------------------------------------\n\n");
 }
 std::unique_ptr<diskann::AbstractIndex> load_index(const std::string &index_path, const Dataset &ds,
@@ -377,9 +436,11 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
 
     std::vector<uint32_t> tags(data_num);
     std::iota(tags.begin(), tags.end(), 1);
+    diskann::cout << "Tags from " << tags[0] << " to " << tags[data_num - 1] << std::endl;
 
-    std::vector<DynamicScenario> scenarios = {DynamicScenario::AddHalf, DynamicScenario::AddAllRemoveHalf,
-                                              DynamicScenario::AddHalfRemoveAndAddOneAtATime};
+    std::vector<DynamicScenario> scenarios = {DynamicScenario::AddHalf};
+    // std::vector<DynamicScenario> scenarios = {DynamicScenario::AddHalf, DynamicScenario::AddAllRemoveHalf,
+    //                                           DynamicScenario::AddHalfRemoveAndAddOneAtATime};
 
     for (auto scenario : scenarios)
     {
@@ -403,120 +464,153 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
         set_log_file(log_file, force_test && diskann::benchmark::file_exists(log_file));
         attach_cout_to_log();
 
-        try
+        if (!diskann::benchmark::file_exists(index_path + ".data"))
         {
-            auto index_build_params = diskann::IndexWriteParametersBuilder(build_params.L, build_params.R)
-                                          .with_max_occlusion_size(750)
-                                          .with_filter_list_size(0)
-                                          .with_alpha(build_params.alpha)
-                                          .with_num_threads(num_threads)
-                                          .build();
-
-            uint32_t max_test_L = *(std::max_element(conf.Lvec.begin(), conf.Lvec.end()));
-            auto index_search_params = diskann::IndexSearchParams(max_test_L, index_build_params.num_threads);
-
-            auto config = diskann::IndexConfigBuilder()
-                              .with_metric(ds.info().metric)
-                              .with_dimension(ds.info().dims)
-                              .with_max_points(ds.info().base_count)
-                              .with_data_load_store_strategy(diskann::DataStoreStrategy::MEMORY)
-                              .with_graph_load_store_strategy(diskann::GraphStoreStrategy::MEMORY)
-                              .with_data_type("float")
-                              .with_label_type("uint")
-                              .with_index_write_params(index_build_params)
-                              .with_index_search_params(index_search_params)
-                              .is_dynamic_index(true)
-                              .is_enable_tags(true)
-                              .is_use_opq(build_params.use_opq)
-                              .is_pq_dist_build(build_params.build_PQ_bytes > 0)
-                              .with_num_pq_chunks(build_params.build_PQ_bytes)
-                              .is_concurrent_consolidate(false)
-                              .build();
-
+            try
             {
-                auto index_factory = diskann::IndexFactory(config);
-                auto index = index_factory.create_instance();
-                index->set_start_points_at_random(static_cast<float>(0));
+                auto index_build_params = diskann::IndexWriteParametersBuilder(build_params.L, build_params.R)
+                                              .with_max_occlusion_size(750)
+                                              .with_filter_list_size(0)
+                                              .with_alpha(build_params.alpha)
+                                              .with_num_threads(num_threads)
+                                              .build();
 
-                log("\nConstruction Parameters:\n");
-                log("----------------------------------------\n");
-                log("R (Max Degree)     : %u\n", build_params.R);
-                log("L (Build List Size): %u\n", build_params.L);
-                log("Max Occlusion Size : %u\n", build_params.max_occlusion_size);
-                log("Alpha              : %.2f\n", build_params.alpha);
-                log("PQ Chunks          : %u\n", build_params.build_PQ_bytes);
-                log("OPQ                : %s\n", build_params.use_opq ? "Yes" : "No");
-                log("----------------------------------------\n");
+                uint32_t max_test_L = *(std::max_element(conf.Lvec.begin(), conf.Lvec.end()));
+                auto index_search_params = diskann::IndexSearchParams(max_test_L, index_build_params.num_threads);
 
-                const size_t max_elements = data_num;
-                const size_t half_elements = max_elements / 2;
+                auto config = diskann::IndexConfigBuilder()
+                                  .with_metric(ds.info().metric)
+                                  .with_dimension(ds.info().dims)
+                                  .with_max_points(ds.info().base_count)
+                                  .with_data_load_store_strategy(diskann::DataStoreStrategy::MEMORY)
+                                  .with_graph_load_store_strategy(diskann::GraphStoreStrategy::MEMORY)
+                                  .with_data_type("float")
+                                  .with_label_type("uint")
+                                  .with_index_write_params(index_build_params)
+                                  .with_index_search_params(index_search_params)
+                                  .is_dynamic_index(true)
+                                  .is_enable_tags(true)
+                                  .is_use_opq(build_params.use_opq)
+                                  .is_pq_dist_build(build_params.build_PQ_bytes > 0)
+                                  .with_num_pq_chunks(build_params.build_PQ_bytes)
+                                  .is_concurrent_consolidate(false)
+                                  .build();
 
-                StopW scenario_timer;
-                log("\n--- Dynamic updates ---\n");
-
-                if (scenario == DynamicScenario::AddHalf)
                 {
-                    StopW add_timer;
-                    for (size_t i = 0; i < half_elements; ++i)
+                    auto index_factory = diskann::IndexFactory(config);
+                    auto index = index_factory.create_instance();
+                    index->set_start_points_at_random(static_cast<float>(0));
+
+                    log("\nConstruction Parameters:\n");
+                    log("----------------------------------------\n");
+                    log("R (Max Degree)     : %u\n", build_params.R);
+                    log("L (Build List Size): %u\n", build_params.L);
+                    log("Max Occlusion Size : %u\n", build_params.max_occlusion_size);
+                    log("Alpha              : %.2f\n", build_params.alpha);
+                    log("PQ Chunks          : %u\n", build_params.build_PQ_bytes);
+                    log("OPQ                : %s\n", build_params.use_opq ? "Yes" : "No");
+                    log("----------------------------------------\n");
+
+                    const size_t max_elements = data_num;
+                    const size_t half_elements = max_elements / 2;
+
+                    StopW scenario_timer;
+                    log("\n--- Dynamic updates ---\n");
+
+                    if (scenario == DynamicScenario::AddHalf)
                     {
-                        index->insert_point(&data[i * data_dim], tags[i]);
+                        StopW add_timer;
+                        for (size_t i = 0; i < half_elements; ++i)
+                        {
+                            index->insert_point(&data[i * data_dim], tags[i]);
+
+                            if (i % 100000 == 0 && i > 0)
+                                log("Inserted %zu points after %.2f s...\n", i,
+                                    (add_timer.getElapsedTimeMicro() / 1e6));
+                        }
+                        log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
                     }
-                    log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+                    else if (scenario == DynamicScenario::AddAllRemoveHalf)
+                    {
+                        StopW add_timer;
+                        for (size_t i = 0; i < max_elements; ++i)
+                        {
+                            index->insert_point(&data[i * data_dim], tags[i]);
+
+                            if (i % 100000 == 0 && i > 0)
+                                log("Inserted %zu points after %.2f s...\n", i,
+                                    (add_timer.getElapsedTimeMicro() / 1e6));
+                        }
+                        log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+
+                        StopW del_stopw;
+                        for (size_t i = half_elements; i < max_elements; ++i)
+                        {
+                            index->lazy_delete(tags[i]);
+
+                            if ((i - half_elements) % 100000 == 0 && i > half_elements)
+                                log("Deleted %zu points after %.2f s...\n", (i - half_elements),
+                                    (del_stopw.getElapsedTimeMicro() / 1e6));
+                            size_t del_count = i - half_elements + 1;
+                            if (del_count > 0 && (del_count % (half_elements / 10)) == 0)
+                                index->consolidate_deletes(index_build_params);
+                        }
+                        log("Delete time: %.2f s\n", (del_stopw.getElapsedTimeMicro() / 1e6));
+                    }
+                    else if (scenario == DynamicScenario::AddHalfRemoveAndAddOneAtATime)
+                    {
+                        // IMPORTANT: The half-dataset ground truth files correspond to the first half of labels
+                        // [0..half-1]. For this scenario we want to end up with exactly that active set. Therefore:
+                        // start with the SECOND half in the index, then swap it out one-by-one.
+                        StopW add_timer;
+                        for (size_t i = half_elements; i < max_elements; ++i)
+                        {
+                            index->insert_point(&data[i * data_dim], tags[i]);
+
+                            if ((i - half_elements) % 100000 == 0 && i > half_elements)
+                                log("Inserted %zu points after %.2f s...\n", (i - half_elements),
+                                    (add_timer.getElapsedTimeMicro() / 1e6));
+                        }
+                        log("Add (second half) time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
+
+                        StopW update_stopw;
+                        for (size_t i = 0; i < half_elements; ++i)
+                        {
+                            index->lazy_delete(tags[i + half_elements]);       // delete second half
+                            index->insert_point(&data[i * data_dim], tags[i]); // add first half
+
+                            if (i % 100000 == 0 && i > 0)
+                                log("Updated %zu points after %.2f s...\n", i,
+                                    (update_stopw.getElapsedTimeMicro() / 1e6));
+                            if (i > 0 && (i % (half_elements / 10)) == 0)
+                                index->consolidate_deletes(index_build_params);
+                        }
+                        log("Update (Delete + Add) time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
+                    }
+
+                    if (scenario != DynamicScenario::AddHalf)
+                    {
+                        StopW cons_stopw;
+                        index->consolidate_deletes(index_build_params);
+                        log("Final consolidate time: %.2f s\n", (cons_stopw.getElapsedTimeMicro() / 1e6));
+                    }
+
+                    log("Total Time (Dynamic Graph Construction): %.2f s\n",
+                        (scenario_timer.getElapsedTimeMicro() / 1e6));
+
+                    index->save(index_path.c_str(), true);
                 }
-                else if (scenario == DynamicScenario::AddAllRemoveHalf)
-                {
-                    StopW add_timer;
-                    for (size_t i = 0; i < max_elements; ++i)
-                    {
-                        index->insert_point(&data[i * data_dim], tags[i]);
-                    }
-                    log("Add time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
 
-                    StopW del_stopw;
-                    for (size_t i = half_elements; i < max_elements; ++i)
-                    {
-                        index->lazy_delete(tags[i]);
-                    }
-                    log("Delete time: %.2f s\n", (del_stopw.getElapsedTimeMicro() / 1e6));
-                }
-                else if (scenario == DynamicScenario::AddHalfRemoveAndAddOneAtATime)
-                {
-                    // IMPORTANT: The half-dataset ground truth files correspond to the first half of labels
-                    // [0..half-1]. For this scenario we want to end up with exactly that active set. Therefore:
-                    // start with the SECOND half in the index, then swap it out one-by-one.
-                    StopW add_timer;
-                    for (size_t i = half_elements; i < max_elements; ++i)
-                    {
-                        index->insert_point(&data[i * data_dim], tags[i]);
-                    }
-                    log("Add (second half) time: %.2f s\n", (add_timer.getElapsedTimeMicro() / 1e6));
-
-                    StopW update_stopw;
-                    for (size_t i = 0; i < half_elements; ++i)
-                    {
-                        index->lazy_delete(tags[i + half_elements]);
-                        index->insert_point(&data[i * data_dim], tags[i]);
-                    }
-                    log("Update (Delete + Add) time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
-                }
-
-                if (scenario != DynamicScenario::AddHalf)
-                {
-                    StopW cons_stopw;
-                    index->consolidate_deletes(index_build_params);
-                    log("Consolidate time: %.2f s\n", (cons_stopw.getElapsedTimeMicro() / 1e6));
-                }
-
-                log("Gesamt Zeit (Dynamic Graph Construction): %.2f s\n", (scenario_timer.getElapsedTimeMicro() / 1e6));
-
-                index->save(index_path.c_str(), true);
+                log("%s: Log written to: %s\n", scenario_name.c_str(), log_file.c_str());
             }
-
-            log("%s: Log written to: %s\n", scenario_name.c_str(), log_file.c_str());
+            catch (const std::exception &e)
+            {
+                log("Exception in dynamic test '%s': %s\n", scenario_name.c_str(), e.what());
+            }
         }
-        catch (const std::exception &e)
+        else
         {
-            log("Exception in dynamic test '%s': %s\n", scenario_name.c_str(), e.what());
+            log("Index %s already exists. Skipping construction.\n", index_path.c_str());
         }
 
         // Generate Graph Statistics (after index object is destroyed)
@@ -655,7 +749,7 @@ int main(int argc, char **argv)
     {
         Dataset dataset(ds_name_to_run, data_root);
         DatasetConfig conf = get_dataset_config(ds_name_to_run);
-        run_static_tests(dataset, conf, force_test, num_threads);
+        // run_static_tests(dataset, conf, force_test, num_threads);
         run_dynamic_tests(dataset, conf, force_test, num_threads);
     }
 
