@@ -60,8 +60,6 @@ target_link_libraries(diskann_build_and_test ${PROJECT_NAME} ${DISKANN_TOOLS_TCM
 target_compile_definitions(diskann_build_and_test PUBLIC
     "DATA_PATH=\"${DATA_PATH}\"")
 
-
-
 if (NOT MSVC)
     install(TARGETS build_disk_index
         build_memory_index

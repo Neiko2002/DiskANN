@@ -18,8 +18,7 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
                               size_t query_dim, const std::vector<std::vector<uint32_t>> &ground_truth,
                               const uint32_t k, const std::vector<uint32_t> &Lvec, uint32_t num_threads)
 {
-    std::vector<TagT> query_result_tags(k * query_num);
-    std::vector<float> latency_stats(query_num, 0);
+    std::vector<TagT> result_tags(k * query_num);
 
     for (uint32_t L : Lvec)
     {
@@ -33,29 +32,18 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
 
         for (size_t i = 0; i < query_num; i++)
         {
-            auto qs = std::chrono::high_resolution_clock::now();
-
             std::vector<T *> res_vectors; // Empty vector to avoid null pointer copies
             std::vector<float> distances(k);
 
             // Always search with tags as they represent the original point IDs.
-            index->search_with_tags(query_data + i * query_dim, k, L, query_result_tags.data() + i * k,
-                                    distances.data(), res_vectors);
-
-            auto qe = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> diff = qe - qs;
-            latency_stats[i] = (float)(diff.count() * 1000000.0);
+            index->search_with_tags(query_data + i * query_dim, k, L, result_tags.data() + i * k, distances.data(),
+                                    res_vectors);
         }
 
         std::chrono::duration<double> diff = std::chrono::high_resolution_clock::now() - start;
 
         double displayed_qps = query_num / diff.count();
         double qps_per_thread = displayed_qps / num_threads;
-
-        std::sort(latency_stats.begin(), latency_stats.end());
-        double mean_latency =
-            std::accumulate(latency_stats.begin(), latency_stats.end(), 0.0) / static_cast<double>(query_num);
-        float p999_latency = latency_stats[(uint64_t)(0.999 * query_num)];
 
         // Calculate Recall
         size_t correct = 0;
@@ -66,7 +54,7 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
                 const auto &gt = ground_truth[i];
                 for (size_t r = 0; r < k; r++)
                 {
-                    uint32_t id = static_cast<uint32_t>(query_result_tags[i * k + r]) - 1;
+                    uint32_t id = static_cast<uint32_t>(result_tags[i * k + r]) - 1; // Tags are 1-based
                     if (std::binary_search(gt.begin(), gt.end(), id))
                     {
                         correct++;
@@ -77,8 +65,7 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
 
         float recall = static_cast<float>(correct) / (static_cast<float>(query_num) * static_cast<float>(k));
 
-        log("L_search %4u, Recall@%u %.4f, QPS/thread %8.2f, Mean Latency %6.2f us, 99.9 Latency %8.2f us\n", L, k,
-            recall, qps_per_thread, mean_latency, p999_latency);
+        log("L_search %4u, Recall@%u %.4f, QPS/thread %8.2f\n", L, k, recall, qps_per_thread);
 
         if (recall >= 0.997f)
             break;
@@ -121,7 +108,7 @@ static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T
                     const auto &gt = ground_truth[q];
                     for (size_t r = 0; r < k; r++)
                     {
-                        uint32_t id = static_cast<uint32_t>(results[r]) - 1;
+                        uint32_t id = static_cast<uint32_t>(results[r]) - 1; // Tags are 1-based
                         if (std::binary_search(gt.begin(), gt.end(), id))
                             correct++;
                     }

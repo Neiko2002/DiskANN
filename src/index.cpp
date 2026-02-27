@@ -2585,7 +2585,7 @@ template <typename T, typename TagT, typename LabelT> void Index<T, TagT, LabelT
     if (!_dynamic_index)
         throw ANNException("Can not compact a non-dynamic index", -1, __FUNCSIG__, __FILE__, __LINE__);
 
-    if (_data_compacted && _nd == _max_points)
+    if (_data_compacted)
     {
         diskann::cerr << "Warning! Calling compact_data() when _data_compacted is true!" << std::endl;
         return;
@@ -2652,10 +2652,6 @@ template <typename T, typename TagT, typename LabelT> void Index<T, TagT, LabelT
                 }
             }
             //_graph_store->get_neighbours((location_t)old).swap(new_adj_list);
-            if (new_adj_list.empty() && new_location[old] != new_location[_start])
-            {
-                new_adj_list.push_back(new_location[_start]);
-            }
             _graph_store->set_neighbours((location_t)old, new_adj_list);
 
             // Move the data and adj list to the correct position
