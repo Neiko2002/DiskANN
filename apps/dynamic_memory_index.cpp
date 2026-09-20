@@ -78,43 +78,40 @@ inline void load_aligned_bin_part(const std::string &bin_file, T *data, size_t o
 
 int main(int argc, char **argv)
 {
-    
+
     //// ---------------------------------- SIFT1M ----------------------------------------
-    //const auto data_dir = std::filesystem::path("e:/Data/Feature/SIFT1M/DiskANN/dynamic");
-    //std::string data_type = "float";
-    //std::string label_type = "uint";
-    //std::string data_path = (data_dir / "sift_base.fbin").string();
+    // const auto data_dir = std::filesystem::path("e:/Data/Feature/SIFT1M/DiskANN/dynamic");
+    // std::string data_type = "float";
+    // std::string label_type = "uint";
+    // std::string data_path = (data_dir / "sift_base.fbin").string();
     ////std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add500k.da").string();
-    //std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add1m_remove500k_10pConsolidate.da").string();
-    ////std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add500k_remove1_add1_until500k_10pConsolidate.da").string();
+    // std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add1m_remove500k_10pConsolidate.da").string();
+    ////std::string index_path_prefix = (data_dir /
+    ///"R64_L300_A1.2_add500k_remove1_add1_until500k_10pConsolidate.da").string();
 
-    //uint32_t num_threads = 1;
-    //uint32_t R = 64;    // max_degree (default is 64): the degree of the graph index, typically between 32 and 150.
-    //uint32_t L = 300;   // Lbuild (default 100): the size of search list we maintain during index building.
-    //uint32_t C = 750;   // default 750
-    //float alpha = 1.2;  // alpha (default is 1.2): between 1.0 and 1.5 which determines the diameter of the graph
-    
+    // uint32_t num_threads = 1;
+    // uint32_t R = 64;    // max_degree (default is 64): the degree of the graph index, typically between 32 and 150.
+    // uint32_t L = 300;   // Lbuild (default 100): the size of search list we maintain during index building.
+    // uint32_t C = 750;   // default 750
+    // float alpha = 1.2;  // alpha (default is 1.2): between 1.0 and 1.5 which determines the diameter of the graph
 
-
-    
     //// ----------------------------------- GloVe --------------------------------------------
-    //const auto data_dir = std::filesystem::path("e:/Data/Feature/GloVe/DiskANN/dynamic");
+    // const auto data_dir = std::filesystem::path("e:/Data/Feature/GloVe/DiskANN/dynamic");
 
-    //std::string data_type = "float";
-    //std::string label_type = "uint";
-    //std::string data_path = (data_dir / "glove-100_base.fbin").string();
+    // std::string data_type = "float";
+    // std::string label_type = "uint";
+    // std::string data_path = (data_dir / "glove-100_base.fbin").string();
     ////std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add591k.da").string();
     // //std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add1183k_remove591k_10pConsolidate.da").string();
-    // std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add591k_remove1_add1_until591k_10pConsolidate.da").string();
-    //    
-    //uint32_t num_threads = 1;
-    //uint32_t R = 64;        // max_degree (default is 64): the degree of the graph index, typically between 32 and 150. 
-    //uint32_t L = 300;       // Lbuild (default is 100): the size of search list we maintain during index building. 
-    //uint32_t C = 750;       // default 750
-    //float alpha = 1.2;  // alpha (default is 1.2): between 1.0 and 1.5 which determines the diameter of the graph
-    
+    // std::string index_path_prefix = (data_dir /
+    // "R64_L300_A1.2_add591k_remove1_add1_until591k_10pConsolidate.da").string();
+    //
+    // uint32_t num_threads = 1;
+    // uint32_t R = 64;        // max_degree (default is 64): the degree of the graph index, typically between 32 and
+    // 150. uint32_t L = 300;       // Lbuild (default is 100): the size of search list we maintain during index
+    // building. uint32_t C = 750;       // default 750 float alpha = 1.2;  // alpha (default is 1.2): between 1.0
+    // and 1.5 which determines the diameter of the graph
 
-    
     // ----------------------------------- Deep1M --------------------------------------------
     const auto data_dir = std::filesystem::path("e:/Data/Feature/Deep1M/DiskANN/");
 
@@ -122,26 +119,28 @@ int main(int argc, char **argv)
     std::string label_type = "uint";
     std::string data_path = (data_dir / "deep1m_base.fbin").string();
     std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add500k.da").string();
-    //std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add1m_remove500k_10pConsolidate.da").string();
-    //std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add500k_remove1_add1_until500k_10pConsolidate.da").string();
+    // std::string index_path_prefix = (data_dir / "R64_L300_A1.2_add1m_remove500k_10pConsolidate.da").string();
+    // std::string index_path_prefix = (data_dir /
+    // "R64_L300_A1.2_add500k_remove1_add1_until500k_10pConsolidate.da").string();
 
     uint32_t num_threads = 1;
-    uint32_t R = 64;  // max_degree (default is 64): the degree of the graph index, typically between 32 and 150.
-    uint32_t L = 300; // Lbuild (default is 100): the size of search list we maintain during index building.
-    uint32_t C = 750; // default 750
+    uint32_t R = 64;   // max_degree (default is 64): the degree of the graph index, typically between 32 and 150.
+    uint32_t L = 300;  // Lbuild (default is 100): the size of search list we maintain during index building.
+    uint32_t C = 750;  // default 750
     float alpha = 1.2; // alpha (default is 1.2): between 1.0 and 1.5 which determines the diameter of the graph
-    
 
     diskann::Metric metric = diskann::Metric::L2;
 
     try
     {
-        diskann::cout << "Starting index build with R: " << R << "  Lbuild: " << L << "  alpha: " << alpha << " #threads: " << num_threads << std::endl;
+        diskann::cout << "Starting index build with R: " << R << "  Lbuild: " << L << "  alpha: " << alpha
+                      << " #threads: " << num_threads << std::endl;
 
         size_t data_num, data_dim;
         diskann::get_bin_metadata(data_path, data_num, data_dim);
         size_t aligned_dim = ROUND_UP(data_dim, 8);
-        diskann::cout << "Loaded " << data_num << " data points with " << data_dim << " dimensions (aligned to " << aligned_dim << ")" << std::endl;
+        diskann::cout << "Loaded " << data_num << " data points with " << data_dim << " dimensions (aligned to "
+                      << aligned_dim << ")" << std::endl;
 
         data_num = data_num / 2;
         float *data = nullptr;
@@ -188,12 +187,11 @@ int main(int argc, char **argv)
         diskann::Timer timer;
 
         // add all in one go
-        //index->build(data, data_num, tags);
+        // index->build(data, data_num, tags);
 
         // T1 add all step by step
         const auto data_num_half = data_num / 2;
-        for (size_t i = 0; i < data_num; i++)               // add all
-        //for (size_t i = data_num_half; i < data_num; i++) // add second half
+        for (size_t i = 0; i < data_num_half; i++) // add first half
         {
             index->insert_point(&data[i * aligned_dim], tags[i]);
             if (i % 100000 == 0)
@@ -201,105 +199,57 @@ int main(int argc, char **argv)
         }
         std::cout << "added " << data_num << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
 
-        
-        // T2 delete the second half
-        //for (uint32_t i = 0; i < data_num_half; i++) 
+        // --- T2 add all and delete the second half ---
+        // for (size_t i = 0; i < data_num; i++)               // add all
+        // {
+        //     index->insert_point(&data[i * aligned_dim], tags[i]);
+        //     if (i % 100000 == 0)
+        //         std::cout << "added " << i << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+        // }
+        // std::cout << "added " << data_num << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+
+        // delete the second half
+        // for (uint32_t i = 0; i < data_num_half; i++)
         //{
         //    index->lazy_delete(tags[data_num_half + i]);
         //    if ((i % (data_num_half / 10)) == 0) // 10% of the data to delete
         //    {
         //        index->consolidate_deletes(index_build_params);
-        //        std::cout << "added " << data_num << ", deleted " << i << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+        //        std::cout << "added " << data_num << ", deleted " << i << " after " << (timer.elapsed() / 1000000.0)
+        //        << " seconds." << std::endl;
         //    }
         //}
-        //index->consolidate_deletes(index_build_params);
-        //std::cout << "added " << data_num << ", deleted " << data_num_half << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-        
+        // index->consolidate_deletes(index_build_params);
+        // std::cout << "added " << data_num << ", deleted " << data_num_half << " after " << (timer.elapsed() /
+        // 1000000.0) << " seconds." << std::endl;
 
-        
-        // T3 remove1 add1 until500k
-        //for (uint32_t i = 0; i < data_num_half; i++)
+        // --- T3 add second half, remove from the second half, while adding from the first half ---
+        // for (size_t i = data_num_half; i < data_num; i++) // add second half
+        // {
+        //     index->insert_point(&data[i * aligned_dim], tags[i]);
+        //     if (i % 100000 == 0)
+        //         std::cout << "added " << i << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+        // }
+        // std::cout << "added " << data_num << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+
+        // for (uint32_t i = 0; i < data_num_half; i++)
         //{
-        //    index->lazy_delete(tags[data_num_half + i]);            // delete second half
-        //    index->insert_point(&data[i * aligned_dim], tags[i]);   // add first half
+        //     index->lazy_delete(tags[data_num_half + i]);            // delete second half
+        //     index->insert_point(&data[i * aligned_dim], tags[i]);   // add first half
 
         //    if ((i % (data_num_half / 10)) == 0) // 10% of the data to delete
         //    {
         //        index->consolidate_deletes(index_build_params);
-        //        std::cout << "added " << (data_num_half+1) << ", deleted " << i << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+        //        std::cout << "added " << (data_num_half+1) << ", deleted " << i << " after " << (timer.elapsed() /
+        //        1000000.0) << " seconds." << std::endl;
         //    }
         //}
-        //index->consolidate_deletes(index_build_params);
-        //std::cout << "added " << data_num << ", deleted " << data_num_half << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-        
-
-
-
-        // add first half step by step
-        /*for (size_t i = 0; i < data_num / 2; i++)
-        {
-            index->insert_point(&data[i * aligned_dim], tags[i]);
-
-            if (i % 10000 == 0)
-                std::cout << "added " << std::to_string(i) << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-        }*/
-        
-        //for (size_t i = 0; i < base_size_fourth; i++)
-        //{
-        //    auto first_pos = 0 + i;
-        //    index->insert_point(&data[first_pos * aligned_dim], tags[first_pos]);
-        //    auto second_pos = base_size_half + i;
-        //    index->insert_point(&data[second_pos * aligned_dim], tags[second_pos]);
-
-        //    if ((i % (base_size_fourth / 10)) == 0) 
-        //        std::cout << "added " << std::to_string(i * 2) << " after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-        //}
-
-        //for (size_t i = 0; i < base_size_fourth; i++)
-        //{
-        //    auto first_pos = base_size_fourth + i;
-        //    index->insert_point(&data[first_pos * aligned_dim], tags[first_pos]);
-        //    auto second_pos = base_size_half + base_size_fourth + i;
-        //    index->insert_point(&data[second_pos * aligned_dim], tags[second_pos]);
-
-        //    index->lazy_delete(tags[base_size_half + (i * 2) + 0]);
-        //    index->lazy_delete(tags[base_size_half + (i * 2) + 1]);
-
-        //    if ((i % (base_size_fourth/10)) == 0) // 10%
-        //    {
-        //        index->consolidate_deletes(index_build_params);
-        //        std::cout << "added " << std::to_string(base_size_half + i * 2) << ", deleted " << std::to_string(i)
-        //                  << " after "
-        //                  << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-        //    }
-
-        //    //auto report = index->consolidate_deletes(index_build_params);
-        //    //std::cout << "#active points: " << report._active_points << std::endl
-        //    //          << "max points: " << report._max_points << std::endl
-        //    //          << "empty slots: " << report._empty_slots << std::endl
-        //    //          << "deletes processed: " << report._slots_released << std::endl
-        //    //          << "latest delete size: " << report._delete_set_size << std::endl
-        //    //          << "rate: (" << 0 / report._time << " points/second overall, "
-        //    //          << 0 / report._time / 1 << " per thread)"
-        //    //          << std::endl;
-        //}
-        //index->consolidate_deletes(index_build_params);
-        //std::cout << std::to_string(base_size_half) << " elements in the index after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-
-        // for (size_t i = 0; i < base_size_half; i++)
-        // {
-        //     index->lazy_delete(tags[base_size_half + i]);
-        //     if ((i % (base_size_half / 10)) == 0) // 10% 
-        //     {
-        //         index->consolidate_deletes(index_build_params);
-        //         std::cout << std::to_string(i) << " deleted after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
-        //     }
-        // }
         // index->consolidate_deletes(index_build_params);
-        // std::cout << std::to_string(base_size_half) << " entries after " << (timer.elapsed() / 1000000.0) << " seconds." << std::endl;
+        // std::cout << "added " << data_num << ", deleted " << data_num_half << " after " << (timer.elapsed() /
+        // 1000000.0) << " seconds." << std::endl;
 
         index->save(index_path_prefix.c_str(), true);
-        //index->save(index_path_prefix.c_str());
+        // index->save(index_path_prefix.c_str());
         return 0;
     }
     catch (const std::exception &e)

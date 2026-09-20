@@ -50,14 +50,14 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
     if (dataset_name == DatasetName::SIFT1M)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::DEEP1M)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
@@ -65,7 +65,7 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     }
     else if (dataset_name == DatasetName::GLOVE)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
@@ -73,7 +73,7 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     }
     else if (dataset_name == DatasetName::AUDIO)
     {
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 20;
@@ -83,7 +83,7 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     else if (dataset_name == DatasetName::ENRON)
     {
         // https://github.com/microsoft/DiskANN/blob/7762821dbfe91e838ee7f6db93d010f48f4c4d6d/diskann-benchmark/perf_test_inputs/async_scalar_mimir_enron.json
-        conf.build_params.R = 32;
+        conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
         conf.anns_k = 100;
@@ -529,7 +529,7 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
                         for (size_t i = 0; i < max_elements; ++i)
                         {
                             index->insert_point(&data[i * data_dim], tags[i]);
-                            if (i > 0 && i % 100000 == 0)
+                            if (i % 100000 == 0 && i > 0)
                                 log("Inserted %zu points after %.2f s...\n", i,
                                     (add_timer.getElapsedTimeMicro() / 1e6));
                         }
@@ -540,11 +540,10 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
                         {
                             index->lazy_delete(tags[i]);
 
-                            if ((i - half_elements) % 100000 == 0 && i > half_elements)
+                            if (half_elements % 100000 == 0 && i > half_elements)
                                 log("Deleted %zu points after %.2f s...\n", (i - half_elements),
                                     (del_stopw.getElapsedTimeMicro() / 1e6));
-                            size_t del_count = i - half_elements + 1;
-                            if (del_count > 0 && (del_count % (half_elements / 10)) == 0)
+                            if ((i % (half_elements / 10)) == 0 && i > 0)
                                 index->consolidate_deletes(index_build_params);
                         }
                         log("Delete time: %.2f s\n", (del_stopw.getElapsedTimeMicro() / 1e6));
@@ -559,7 +558,7 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
                         {
                             index->insert_point(&data[i * data_dim], tags[i]);
 
-                            if ((i - half_elements) % 100000 == 0 && i > half_elements)
+                            if (half_elements % 100000 == 0 && i > half_elements)
                                 log("Inserted %zu points after %.2f s...\n", (i - half_elements),
                                     (add_timer.getElapsedTimeMicro() / 1e6));
                         }
@@ -574,7 +573,7 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
                             if (i % 100000 == 0 && i > 0)
                                 log("Updated %zu points after %.2f s...\n", i,
                                     (update_stopw.getElapsedTimeMicro() / 1e6));
-                            if (i > 0 && (i % (half_elements / 10)) == 0)
+                            if ((i % (half_elements / 10)) == 0 && i > 0)
                                 index->consolidate_deletes(index_build_params);
                         }
                         log("Update (Delete + Add) time: %.2f s\n", (update_stopw.getElapsedTimeMicro() / 1e6));
@@ -671,7 +670,7 @@ int main(int argc, char **argv)
 #endif
 
     std::string data_root = DATA_PATH;
-    DatasetName ds_name = DatasetName::GLOVE;
+    DatasetName ds_name = DatasetName::ALL;
     bool force_test = false;
     uint32_t num_threads = 1;
 
