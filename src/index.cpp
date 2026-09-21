@@ -3582,14 +3582,5 @@ template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t,
 template DISKANN_DLLEXPORT std::pair<uint32_t, uint32_t> Index<int8_t, uint32_t, uint16_t>::search_with_filters<
     uint32_t>(const int8_t *query, const uint16_t &filter_label, const size_t K, const uint32_t L, uint32_t *indices,
               float *distances);
-template DISKANN_DLLEXPORT size_t Index<float, uint32_t, uint32_t>::_explore_with_tags(
-    const DataType &query, const uint64_t K, const uint32_t L, const uint32_t max_dist, const uint32_t entry_point,
-    const TagType &tags, float *distances);
-template DISKANN_DLLEXPORT size_t Index<uint8_t, uint32_t, uint32_t>::_explore_with_tags(
-    const DataType &query, const uint64_t K, const uint32_t L, const uint32_t max_dist, const uint32_t entry_point,
-    const TagType &tags, float *distances);
-template DISKANN_DLLEXPORT size_t Index<int8_t, uint32_t, uint32_t>::_explore_with_tags(
-    const DataType &query, const uint64_t K, const uint32_t L, const uint32_t max_dist, const uint32_t entry_point,
-    const TagType &tags, float *distances);
 
 } // namespace diskann
