@@ -286,9 +286,21 @@ class Dataset
 
     std::string query_groundtruth_file(size_t nb) const
     {
-        return (files_dir_ / (std::string(name_.name()) + "_groundtruth_top" +
-                              std::to_string(DatasetInfo::GROUNDTRUTH_TOPK) + "_nb" + std::to_string(nb) + ".ivecs"))
-            .string();
+        std::string primary = (files_dir_ / (std::string(name_.name()) + "_groundtruth_top" +
+                                            std::to_string(DatasetInfo::GROUNDTRUTH_TOPK) + "_nb" + std::to_string(nb) + ".ivecs"))
+                                  .string();
+        if (std::filesystem::exists(primary))
+        {
+            return primary;
+        }
+
+        std::string fallback = (files_dir_ / (std::string(name_.name()) + "_groundtruth_top100_nb" + std::to_string(nb) + ".ivecs"))
+                                   .string();
+        if (std::filesystem::exists(fallback))
+        {
+            return fallback;
+        }
+        return primary;
     }
     std::string query_groundtruth_file_full() const
     {
