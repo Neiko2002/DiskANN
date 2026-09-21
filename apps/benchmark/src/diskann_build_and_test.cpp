@@ -50,35 +50,60 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
     DatasetConfig conf;
     conf.dataset_name = dataset_name;
 
-    // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
     if (dataset_name == DatasetName::SIFT1M)
     {
+        // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
         conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
+
+        // https://github.com/Lsyhprum/WEAVESS/tree/dev/parameters
+        conf.build_params.R = 50;
+        conf.build_params.L = 70;
+        conf.build_params.alpha = 2.0f;
+
         conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::DEEP1M)
     {
-        conf.build_params.R = 64;
-        conf.build_params.L = 125;
-        conf.build_params.alpha = 1.2f;
-        conf.anns_k = 100;
+        // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
+        // conf.build_params.R = 64;
+        // conf.build_params.L = 125;
+        // conf.build_params.alpha = 1.2f;
+
+        // https://github.com/Lsyhprum/WEAVESS/tree/dev/parameters
+        conf.build_params.R = 50;
+        conf.build_params.L = 70;
+        conf.build_params.alpha = 2.0f;
+
         conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
     else if (dataset_name == DatasetName::GLOVE)
     {
+        // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
         conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
-        conf.anns_k = 100;
+
+        // https://github.com/Lsyhprum/WEAVESS/tree/dev/parameters
+        conf.build_params.R = 110;
+        conf.build_params.L = 120;
+        conf.build_params.alpha = 2.0f;
+
         conf.Lvec = {100, 250, 500, 1000, 1500, 2500, 5000, 10000};
     }
     else if (dataset_name == DatasetName::AUDIO)
     {
+        // https://github.com/erikbern/ann-benchmarks/blob/main/ann_benchmarks/algorithms/diskann/config.yml
         conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
+
+        // https://github.com/Lsyhprum/WEAVESS/tree/dev/parameters
+        conf.build_params.R = 50;
+        conf.build_params.L = 70;
+        conf.build_params.alpha = 2.0f;
+
         conf.anns_k = 20;
         conf.anns_repeat = 5;
         conf.Lvec = {20, 30, 40, 50, 60, 70, 80, 90, 100};
@@ -89,7 +114,12 @@ static DatasetConfig get_dataset_config(const DatasetName &dataset_name)
         conf.build_params.R = 64;
         conf.build_params.L = 125;
         conf.build_params.alpha = 1.2f;
-        conf.anns_k = 100;
+
+        // https://github.com/Lsyhprum/WEAVESS/tree/dev/parameters
+        conf.build_params.R = 110;
+        conf.build_params.L = 140;
+        conf.build_params.alpha = 2.0f;
+
         conf.Lvec = {100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 250, 300};
     }
 
@@ -113,7 +143,6 @@ std::string get_index_path(const Dataset &ds, const DatasetConfig &conf)
                          std::to_string(conf.build_params.L);
     return prefix;
 }
-
 
 void run_create_index(const std::string &index_path, const Dataset &ds, const DatasetConfig &conf, uint32_t num_threads)
 {
@@ -349,6 +378,20 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
         set_log_file(log_file, force_test && diskann::benchmark::file_exists(log_file));
         attach_cout_to_log();
 
+        log("================================================================================\n");
+        log("DiskANN Benchmark Suite\n");
+#ifdef USE_AVX2
+        log("Compiled with AVX2 support.\n");
+#elif defined(__AVX__)
+        log("Compiled with AVX support.\n");
+#else
+        log("Compiled without AVX/AVX2 support.\n");
+#endif
+        log("Using %u threads for operations.\n", num_threads);
+        log("================================================================================\n");
+        log("DiskANN Dynamic Benchmark: %s (%s)\n", ds.name(), scenario_name.c_str());
+        log("================================================================================\n");
+
         if (!diskann::benchmark::file_exists(index_path + ".data"))
         {
             try
@@ -515,7 +558,16 @@ void run_static_tests(const Dataset &ds, const DatasetConfig &conf, bool force_t
 
     set_log_file(log_file, force_test);
     attach_cout_to_log();
-
+    log("================================================================================\n");
+    log("DiskANN Benchmark Suite\n");
+#ifdef USE_AVX2
+    log("Compiled with AVX2 support.\n");
+#elif defined(__AVX__)
+    log("Compiled with AVX support.\n");
+#else
+    log("Compiled without AVX/AVX2 support.\n");
+#endif
+    log("Using %u threads for operations.\n", num_threads);
     log("================================================================================\n");
     log("DiskANN Benchmark for %s\n", ds.name());
     log("================================================================================\n");
