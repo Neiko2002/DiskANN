@@ -37,6 +37,7 @@ struct DatasetConfig
     // ANNS Test Params
     uint32_t anns_k = 100;
     uint32_t anns_repeat = 1;
+    float anns_recall_target = 0.995f;
     std::vector<uint32_t> Lvec = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 
     // Exploration Params
@@ -232,7 +233,8 @@ void run_anns_test(const std::string &index_path, const Dataset &ds, const Datas
     if (typed_index)
     {
         test_diskann_anns<float, uint32_t, uint32_t>(typed_index, query_data.data, query_num, query_dim, ground_truth,
-                                                     conf.anns_k, conf.Lvec, num_threads);
+                                                     conf.anns_k, conf.Lvec, num_threads, conf.anns_repeat,
+                                                     conf.anns_recall_target);
     }
     else
     {
@@ -279,7 +281,8 @@ void run_explore_test(const std::string &index_path, const Dataset &ds, const Da
         if (typed_index && explore_queries)
         {
             test_diskann_explore<float, uint32_t, uint32_t>(typed_index, explore_queries, num_explore, dim_explore,
-                                                            explore_gt_vec, entry_indices, conf.explore_k);
+                                                            explore_gt_vec, entry_indices, conf.explore_k,
+                                                            conf.explore_recall_target);
         }
 
         if (explore_queries)

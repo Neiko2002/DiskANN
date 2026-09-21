@@ -16,9 +16,11 @@ namespace diskann::benchmark
 template <typename T, typename TagT, typename LabelT>
 static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *query_data, size_t query_num,
                               size_t query_dim, const std::vector<std::vector<uint32_t>> &ground_truth,
-                              const uint32_t k, const std::vector<uint32_t> &Lvec, uint32_t num_threads)
+                              const uint32_t k, const std::vector<uint32_t> &Lvec, uint32_t num_threads,
+                              uint32_t repeats = 1, float recall_target = 0.995f)
 {
     std::vector<TagT> result_tags(k * query_num);
+    const uint32_t actual_repeats = std::max(1u, repeats);
 
     for (uint32_t L : Lvec)
     {
@@ -30,19 +32,23 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        for (size_t i = 0; i < query_num; i++)
+        for (uint32_t rep = 0; rep < actual_repeats; rep++)
         {
-            std::vector<T *> res_vectors; // Empty vector to avoid null pointer copies
-            std::vector<float> distances(k);
+            for (size_t i = 0; i < query_num; i++)
+            {
+                std::vector<T *> res_vectors; // Empty vector to avoid null pointer copies
+                std::vector<float> distances(k);
 
-            // Always search with tags as they represent the original point IDs.
-            index->search_with_tags(query_data + i * query_dim, k, L, result_tags.data() + i * k, distances.data(),
-                                    res_vectors);
+                // Always search with tags as they represent the original point IDs.
+                index->search_with_tags(query_data + i * query_dim, k, L, result_tags.data() + i * k, distances.data(),
+                                        res_vectors);
+            }
         }
 
         std::chrono::duration<double> diff = std::chrono::high_resolution_clock::now() - start;
 
-        double displayed_qps = query_num / diff.count();
+        double total_queries = static_cast<double>(query_num) * actual_repeats;
+        double displayed_qps = total_queries / diff.count();
         double qps_per_thread = displayed_qps / num_threads;
 
         // Calculate Recall
@@ -67,7 +73,7 @@ static void test_diskann_anns(diskann::Index<T, TagT, LabelT> *index, const T *q
 
         log("L_search %4u, Recall@%u %.4f, QPS/thread %8.2f\n", L, k, recall, qps_per_thread);
 
-        if (recall >= 0.997f)
+        if (recall >= recall_target)
             break;
     }
 }
@@ -76,7 +82,8 @@ template <typename T, typename TagT, typename LabelT>
 static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T *explore_query_data,
                                  size_t explore_query_num, size_t explore_query_dim,
                                  const std::vector<std::vector<uint32_t>> &ground_truth,
-                                 const std::vector<std::vector<uint32_t>> &entry_node_indices, const uint32_t k)
+                                 const std::vector<std::vector<uint32_t>> &entry_node_indices, const uint32_t k,
+                                 float recall_target = 0.995f)
 {
     log("Testing Exploration (k=%u)...\n", k);
 
@@ -125,7 +132,7 @@ static void test_diskann_explore(diskann::Index<T, TagT, LabelT> *index, const T
             log("max_distance_count %7u, Recall@%u %.6f, time_us_per_query %6llu us\n", max_distance_count, k, recall,
                 (unsigned long long)time_per_query);
 
-            if (recall >= 0.997f)
+            if (recall >= recall_target)
             {
                 return;
             }
