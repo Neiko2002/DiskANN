@@ -14,8 +14,10 @@
 #include "index.h"
 #include "index_factory.h"
 #include "dataset.h"
+#include "analysis.h"
 
 using namespace diskann::benchmark;
+using namespace diskann::benchmark::analysis;
 
 struct DiskANNBuildParams
 {
@@ -111,7 +113,6 @@ std::string get_index_path(const Dataset &ds, const DatasetConfig &conf)
     return prefix;
 }
 
-void generate_graph_stats(const std::string &graph_file);
 
 void run_create_index(const std::string &index_path, const Dataset &ds, const DatasetConfig &conf, uint32_t num_threads)
 {
@@ -186,127 +187,8 @@ void run_create_index(const std::string &index_path, const Dataset &ds, const Da
     index->save(index_path.c_str());
 }
 
-// -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-void generate_graph_stats(const std::string &graph_file)
-{
-    std::ifstream in;
-    in.exceptions(std::ios::badbit | std::ios::failbit);
-
-    try
-    {
-        in.open(graph_file, std::ios::binary);
-    }
-    catch (const std::exception &)
-    {
-        log("Warning: Could not open graph file %s for statistics calculation.\n", graph_file.c_str());
-        return;
-    }
-
-    size_t expected_file_size;
-    uint32_t max_observed_degree;
-    uint32_t start;
-    size_t file_frozen_pts;
-
-    in.read((char *)&expected_file_size, sizeof(size_t));
-    in.read((char *)&max_observed_degree, sizeof(uint32_t));
-    in.read((char *)&start, sizeof(uint32_t));
-    in.read((char *)&file_frozen_pts, sizeof(size_t));
-
-    size_t num_nodes = 0;
-    size_t min_out_degree = std::numeric_limits<size_t>::max();
-    size_t max_out_degree = 0;
-    size_t total_edges = 0;
-    size_t count_out_degree_0 = 0;
-    size_t count_out_degree_1 = 0;
-
-    std::vector<uint32_t> in_degrees;
-
-    size_t bytes_read = sizeof(size_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(size_t);
-
-    while (bytes_read < expected_file_size)
-    {
-        uint32_t k;
-        in.read((char *)&k, sizeof(uint32_t));
-
-        if (k > 0)
-        {
-            std::vector<uint32_t> neighbors(k);
-            in.read((char *)neighbors.data(), k * sizeof(uint32_t));
-            for (uint32_t ngh : neighbors)
-            {
-                if (ngh >= in_degrees.size())
-                {
-                    in_degrees.resize(std::max((size_t)ngh + 1, in_degrees.size() * 2), 0);
-                }
-                in_degrees[ngh]++;
-            }
-        }
-
-        bytes_read += sizeof(uint32_t) * (k + 1);
-
-        min_out_degree = std::min(min_out_degree, (size_t)k);
-        max_out_degree = std::max(max_out_degree, (size_t)k);
-        total_edges += k;
-
-        if (k == 0)
-            count_out_degree_0++;
-        else if (k == 1)
-            count_out_degree_1++;
-
-        num_nodes++;
-    }
-
-    if (num_nodes == 0)
-    {
-        min_out_degree = 0;
-    }
-
-    if (in_degrees.size() < num_nodes)
-    {
-        in_degrees.resize(num_nodes, 0);
-    }
-
-    size_t min_in_degree = std::numeric_limits<size_t>::max();
-    size_t max_in_degree = 0;
-    size_t count_in_degree_0 = 0;
-    size_t count_in_degree_1 = 0;
-
-    if (num_nodes > 0)
-    {
-        for (size_t i = 0; i < num_nodes; i++)
-        {
-            size_t deg = (size_t)in_degrees[i];
-            min_in_degree = std::min(min_in_degree, deg);
-            max_in_degree = std::max(max_in_degree, deg);
-            if (deg == 0)
-                count_in_degree_0++;
-            else if (deg == 1)
-                count_in_degree_1++;
-        }
-    }
-    else
-    {
-        min_in_degree = 0;
-    }
-
-    log("\n----------------------------------------\n");
-    log("Graph Statistics:\n");
-    log("----------------------------------------\n");
-    log("Total Nodes      : %zu\n", num_nodes);
-    log("Total Edges      : %zu\n", total_edges);
-    log("Max Out-Degree   : %zu\n", max_out_degree);
-    log("Min Out-Degree   : %zu\n", min_out_degree);
-    log("Max In-Degree    : %zu\n", max_in_degree);
-    log("Min In-Degree    : %zu\n", min_in_degree);
-    log("Count (Out=0)    : %zu\n", count_out_degree_0);
-    log("Count (Out=1)    : %zu\n", count_out_degree_1);
-    log("Count (In=0)     : %zu\n", count_in_degree_0);
-    log("Count (In=1)     : %zu\n", count_in_degree_1);
-    log("Average Degree   : %.2f\n", num_nodes > 0 ? (float)total_edges / num_nodes : 0.0f);
-    log("----------------------------------------\n\n");
-}
 std::unique_ptr<diskann::AbstractIndex> load_index(const std::string &index_path, const Dataset &ds,
                                                    uint32_t num_threads, uint32_t scratch_size)
 {
@@ -605,7 +487,7 @@ void run_dynamic_tests(const Dataset &ds, const DatasetConfig &conf, bool force_
         }
 
         // Generate Graph Statistics (after index object is destroyed)
-        generate_graph_stats(index_path);
+        generate_graph_stats(index_path, ds, true, num_threads);
 
         // Test the index by loading it from disk (out-of-context testing)
         run_anns_test(index_path, ds, conf, num_threads, true);
@@ -644,7 +526,7 @@ void run_static_tests(const Dataset &ds, const DatasetConfig &conf, bool force_t
             run_create_index(index_path, ds, conf, num_threads);
         }
 
-        generate_graph_stats(index_path);
+        generate_graph_stats(index_path, ds, false, num_threads);
         run_anns_test(index_path, ds, conf, num_threads, false);
         run_explore_test(index_path, ds, conf, false, num_threads);
     }
